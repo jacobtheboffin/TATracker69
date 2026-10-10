@@ -16,10 +16,10 @@ SPOTIFY_CLIENT_ID = "YOUR_CLIENT_ID_HERE"
 SPOTIFY_CLIENT_SECRET = "YOUR_CLIENT_SECRET_HERE"
 EMBEDDED_PLAYLIST_ID = "7t0Gu2M5ZcwmVtidMb9RRR"
 
-# --- REFINED PREMIUM CSS THEME (CONTRAST & BUTTON FIXES) ---
+# --- REFINED PREMIUM CSS THEME (Pill Tabs & Muted Inputs) ---
 st.markdown("""
     <style>
-        /* Overall App Background & Bright Readable Text */
+        /* Overall App Background & Dark Text Setup */
         .stApp, [data-testid="stAppViewContainer"], [data-testid="stHeader"] {
             background-color: #0d0e12 !important;
             color: #ffffff !important;
@@ -51,40 +51,62 @@ st.markdown("""
             padding-bottom: 16px;
             margin-bottom: 24px;
         }
+
+        /* Fully Rounded Pill Outer Track */
         .stTabs [data-baseweb="tab-list"] {
             background-color: #14161b !important;
             border: 1px solid #2b3040 !important;
-            border-radius: 22px !important;
-            padding: 12px !important;
-            gap: 16px !important;
+            border-radius: 9999px !important;
+            padding: 8px 12px !important;
+            gap: 12px !important;
         }
 
-        /* Spacious, Soft-Cornered, High-Contrast Navigation Pills */
+        /* Fully Oval / Rounded Capsule Buttons */
         .stTabs [data-baseweb="tab"] {
-            font-size: 17px !important;
+            font-size: 16px !important;
             font-weight: 700 !important;
-            padding: 18px 36px !important;
-            color: #ffffff !important;     
-            border-radius: 20px !important;
-            background-color: #1e2530 !important; 
-            border: 1px solid #374151 !important;
+            padding: 14px 32px !important;
+            color: #cbd5e1 !important;     
+            border-radius: 9999px !important;
+            background-color: #1a1e28 !important; 
+            border: 1px solid #333d52 !important;
             transition: all 0.25s ease-in-out !important;
+            outline: none !important;
         }
+
+        /* Remove default Streamlit red underline on tabs */
+        .stTabs [data-baseweb="tab-highlight-container"] {
+            display: none !important;
+        }
+
         .stTabs [data-baseweb="tab"]:hover {
             color: #ffffff !important;
-            background-color: #2a3447 !important;
+            background-color: #252e3f !important;
             border-color: #60a5fa !important;
-            transform: translateY(-1px);
         }
+
         .stTabs [aria-selected="true"] {
             color: #ffffff !important;
             background-color: #2563eb !important; 
             border: 1px solid #93c5fd !important;
             font-weight: 800 !important;
-            box-shadow: 0 4px 20px rgba(37, 99, 235, 0.5) !important;
+            box-shadow: 0 4px 18px rgba(37, 99, 235, 0.4) !important;
         }
 
-        /* Global Button Overhaul (Fixes bright white washed-out buttons) */
+        /* Muted Dark Text Boxes (Fixes bright white inputs) */
+        .stTextInput input {
+            background-color: #1e222d !important;
+            color: #ffffff !important;
+            border: 1px solid #3b4254 !important;
+            border-radius: 10px !important;
+            padding: 10px 14px !important;
+        }
+        .stTextInput input:focus {
+            border-color: #60a5fa !important;
+            box-shadow: 0 0 0 1px #60a5fa !important;
+        }
+
+        /* Global Button Styling */
         .stButton button, button {
             background-color: #1e2530 !important;
             color: #ffffff !important;
@@ -203,6 +225,25 @@ def fetch_user_display_name(client_id, client_secret, user_id):
   except Exception:
     return user_id
 
+# Helper to extract cover art across all Spotify schemas
+def extract_cover_art(track_obj):
+  if not track_obj or not isinstance(track_obj, dict):
+    return ""
+  
+  # Scheme 1: Standard track -> album -> images
+  album = track_obj.get("album")
+  if isinstance(album, dict):
+    images = album.get("images", [])
+    if images and isinstance(images, list) and len(images) > 0:
+      return images[0].get("url", "")
+
+  # Scheme 2: Direct images list
+  images = track_obj.get("images", [])
+  if images and isinstance(images, list) and len(images) > 0:
+    return images[0].get("url", "")
+    
+  return ""
+
 # --- AUTOMATIC SPOTIFY SYNC LOGIC ---
 def sync_spotify_playlist():
   if not SPOTIFY_CLIENT_ID or not SPOTIFY_CLIENT_SECRET or SPOTIFY_CLIENT_ID == "YOUR_CLIENT_ID_HERE":
@@ -236,7 +277,7 @@ def sync_spotify_playlist():
       track_id = None
       song_name = "Unknown Track"
       artist = "Unknown Artist"
-      image_url = ""
+      image_url = extract_cover_art(track_info)
 
       if track_info and isinstance(track_info, dict):
         track_id = track_info.get("id")
@@ -244,11 +285,6 @@ def sync_spotify_playlist():
         artists_list = track_info.get("artists", [])
         if artists_list:
           artist = ", ".join([ar.get("name", "Unknown") for ar in artists_list])
-        
-        album = track_info.get("album", {})
-        images = album.get("images", [])
-        if images:
-          image_url = images[0].get("url", "")
 
       if not track_id and item_uri and "spotify:track:" in item_uri:
         track_id = item_uri.split(":")[-1]
@@ -273,7 +309,8 @@ def sync_spotify_playlist():
             (track_id, song_name, artist, added_by, display_name, image_url, added_at),
         )
       else:
-        cursor.execute("UPDATE tracks SET image_url = ? WHERE id = ? AND (image_url IS NULL OR image_url = '')", (image_url, track_id))
+        if image_url:
+          cursor.execute("UPDATE tracks SET image_url = ? WHERE id = ?", (image_url, track_id))
 
     conn.commit()
     conn.close()
@@ -373,6 +410,15 @@ if tab1 is not None:
               st.success(f"Judgement saved for '{row['song_name']}'!")
               st.rerun()
 
+# Palette used across Database and Feed for consistent Uploader Color Assignment
+PALETTE = [
+    "#3b82f6", # Blue
+    "#22c55e", # Green
+    "#eab308", # Yellow
+    "#ef4444", # Red
+    "#a855f7", # Purple
+]
+
 # --- TAB 2: JUDGEMENT HISTORY (VERTICAL FEED) ---
 with tab2:
   st.header("📜 Live Judgement History Feed")
@@ -380,7 +426,7 @@ with tab2:
 
   conn = sqlite3.connect(DB_FILE)
   df_history = pd.read_sql("""
-      SELECT j.*, t.image_url as track_image_url, t.uploader_display_name 
+      SELECT j.*, t.image_url as track_image_url, t.uploader, t.uploader_display_name 
       FROM judgement_log j 
       LEFT JOIN tracks t ON j.track_id = t.id 
       ORDER BY j.id DESC
@@ -390,45 +436,58 @@ with tab2:
   if df_history.empty:
     st.info("No ratings have been submitted yet.")
   else:
+    # Build distinct uploader map for color matching
+    unique_uploaders = list(df_history['uploader_display_name'].fillna('Unknown').unique())
+    color_map = {u: PALETTE[i % len(PALETTE)] for i, u in enumerate(unique_uploaders)}
+
     for _, log in df_history.iterrows():
-      with st.container(border=True):
-        col_img, col_details, col_actions = st.columns([1, 3.5, 1.2])
+      uploader_name = log.get("uploader_display_name") or log.get("uploader") or "Unknown"
+      uploader_color = color_map.get(uploader_name, "#3b82f6")
 
-        cover_url = log.get("image_url") or log.get("track_image_url")
+      # Render Container with custom uploader border highlight
+      st.markdown(f"""
+          <div style="border: 2px solid {uploader_color}; border-radius: 12px; padding: 16px; margin-bottom: 16px; background-color: #12151e;">
+      """, unsafe_allow_html=True)
 
-        with col_img:
-          if cover_url:
-            st.image(cover_url, width=110)
-          else:
-            st.caption("📷 No Cover")
+      col_img, col_details, col_actions = st.columns([1, 3.5, 1.2])
 
-        with col_details:
-          st.markdown(f"### **{log['song_name']}**")
-          st.markdown(f"**Artist:** *{log['artist']}*")
-          st.markdown(f"**Score Given:** <span class='feed-score'>⭐ {log['score']} / 5</span>", unsafe_allow_html=True)
-          
-          st.checkbox("Saved Song", value=bool(log["is_saved"]), disabled=True, key=f"feed_saved_{log['id']}")
-          st.checkbox("Discovery Track", value=bool(log["is_discovery"]), disabled=True, key=f"feed_disc_{log['id']}")
-          
-          st.caption(f"🕒 Judged on {log['timestamp']}")
+      cover_url = log.get("image_url") or log.get("track_image_url")
 
-        with col_actions:
-          if st.session_state.is_admin:
-            if st.button("↩️ Undo", key=f"undo_{log['id']}"):
-              conn = sqlite3.connect(DB_FILE)
-              cursor = conn.cursor()
-              cursor.execute("""
-                    UPDATE tracks 
-                    SET score = 0, is_saved = 0, is_discovery = 0, judged_at = NULL
-                    WHERE id = ?
-                """, (log['track_id'],))
-              cursor.execute("DELETE FROM judgement_log WHERE id = ?", (log['id'],))
-              conn.commit()
-              conn.close()
-              st.success(f"Reverted '{log['song_name']}'!")
-              st.rerun()
-          else:
-            st.caption("🔒 Admin mode required")
+      with col_img:
+        if cover_url and str(cover_url).strip():
+          st.image(cover_url, width=110)
+        else:
+          st.caption("📷 No Cover")
+
+      with col_details:
+        st.markdown(f"### **{log['song_name']}**")
+        st.markdown(f"**Artist:** *{log['artist']}* | **Uploader:** <span style='color:{uploader_color}; font-weight:bold;'>{uploader_name}</span>", unsafe_allow_html=True)
+        st.markdown(f"**Score Given:** <span class='feed-score'>⭐ {log['score']} / 5</span>", unsafe_allow_html=True)
+        
+        st.checkbox("Saved Song", value=bool(log["is_saved"]), disabled=True, key=f"feed_saved_{log['id']}")
+        st.checkbox("Discovery Track", value=bool(log["is_discovery"]), disabled=True, key=f"feed_disc_{log['id']}")
+        
+        st.caption(f"🕒 Judged on {log['timestamp']}")
+
+      with col_actions:
+        if st.session_state.is_admin:
+          if st.button("↩️ Undo", key=f"undo_{log['id']}"):
+            conn = sqlite3.connect(DB_FILE)
+            cursor = conn.cursor()
+            cursor.execute("""
+                  UPDATE tracks 
+                  SET score = 0, is_saved = 0, is_discovery = 0, judged_at = NULL
+                  WHERE id = ?
+              """, (log['track_id'],))
+            cursor.execute("DELETE FROM judgement_log WHERE id = ?", (log['id'],))
+            conn.commit()
+            conn.close()
+            st.success(f"Reverted '{log['song_name']}'!")
+            st.rerun()
+        else:
+          st.caption("🔒 Admin mode required")
+
+      st.markdown("</div>", unsafe_allow_html=True)
 
 # --- TAB 3: LIVE ANALYTICS ---
 with tab3:
@@ -522,7 +581,6 @@ with tab4:
     cols_to_drop = [c for c in ["id", "uploader", "image_url"] if c in df_full.columns]
     df_full = df_full.drop(columns=cols_to_drop)
 
-    # Rename added_at to Added as requested
     if "added_at" in df_full.columns:
       df_full["added_at"] = (
           pd.to_datetime(df_full["added_at"], errors="coerce")
@@ -539,14 +597,14 @@ with tab4:
       df_full["Uploader"] = "Unknown"
 
     unique_uploaders = df_full["Uploader"].unique()
-    palette = [
+    rgba_palette = [
         "rgba(59, 130, 246, 0.15)",
         "rgba(34, 197, 94, 0.15)",
         "rgba(234, 179, 8, 0.15)",
         "rgba(239, 68, 68, 0.15)",
         "rgba(168, 85, 247, 0.15)",
     ]
-    uploader_color_map = {u: palette[i % len(palette)] for i, u in enumerate(unique_uploaders)}
+    uploader_color_map = {u: rgba_palette[i % len(rgba_palette)] for i, u in enumerate(unique_uploaders)}
 
     def style_rows(row):
       color = uploader_color_map.get(row["Uploader"], "")
