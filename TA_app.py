@@ -47,12 +47,16 @@ st.markdown("""
             font-size: 14px !important;
         }
 
-        /* Input Fields */
+        /* Input Fields & Legible Placeholders */
         .stTextInput input {
             background-color: #1a1d26 !important;
             color: #ffffff !important;
             border: 1px solid #2e3445 !important;
             border-radius: 8px !important;
+        }
+        .stTextInput input::placeholder {
+            color: #64748b !important;
+            opacity: 1 !important;
         }
         .stTextInput input:focus {
             border-color: #3b82f6 !important;
@@ -77,30 +81,32 @@ st.markdown("""
             background-color: #14161b !important;
             border: 1px solid #232631;
             border-radius: 14px;
-            padding: 6px;
-            gap: 8px;
+            padding: 8px;
+            gap: 12px;
         }
 
-        /* Smooth Pill Tabs & Unselected Titles Fix */
+        /* Spacious & Readable Tabs */
         .stTabs [data-baseweb="tab"] {
             font-size: 16px !important;
             font-weight: 600 !important;
-            padding: 10px 20px !important;
-            color: #94a3b8 !important;
-            border-radius: 10px !important;
-            border: none !important;
-            background-color: transparent !important;
+            padding: 14px 28px !important;
+            color: #cbd5e1 !important;
+            border-radius: 12px !important;
+            background-color: #1a1d26 !important;
+            border: 1px solid #2e3445 !important;
             transition: all 0.2s ease;
         }
         .stTabs [data-baseweb="tab"]:hover {
             color: #ffffff !important;
-            background-color: #1e2230 !important;
+            background-color: #252a37 !important;
+            border-color: #3b82f6 !important;
         }
         .stTabs [aria-selected="true"] {
             color: #ffffff !important;
             background-color: #3b82f6 !important;
+            border: 1px solid #60a5fa !important;
             font-weight: 700 !important;
-            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+            box-shadow: 0 4px 14px rgba(59, 130, 246, 0.4);
         }
 
         /* Undo Button Soft Blend */
@@ -312,7 +318,6 @@ def sync_spotify_playlist(playlist_url, client_id, client_secret, exclude_self):
         new_count += 1
         skip_reasons.append(f"✅ '{song_name}' by {artist} — Successfully Added!")
       else:
-        # Update image_url if missing on existing record
         cursor.execute("UPDATE tracks SET image_url = ? WHERE id = ? AND (image_url IS NULL OR image_url = '')", (image_url, track_id))
         skipped_count += 1
         skip_reasons.append(f"⚠️ '{song_name}' — Skipped: Already exists in database")
@@ -424,89 +429,84 @@ if st.session_state.last_sync_log:
     for log_entry in st.session_state.last_sync_log:
       st.write(log_entry)
 
-# Navigation Tabs
-tab1, tab2, tab3, tab4 = st.tabs([
-    "🎯 Judge New Tracks",
-    "📜 Judgement History",
-    "📊 Live Analytics",
-    "📁 Database / Spreadsheet",
-])
+# Navigation Tabs (Conditionally rendered based on Admin status)
+if st.session_state.is_admin:
+  tab1, tab2, tab3, tab4 = st.tabs([
+      "🎯 Judge New Tracks",
+      "📜 Judgement History",
+      "📊 Live Analytics",
+      "📁 Database / Spreadsheet",
+  ])
+else:
+  tab1 = None
+  tab2, tab3, tab4 = st.tabs([
+      "📜 Judgement History",
+      "📊 Live Analytics",
+      "📁 Database / Spreadsheet",
+  ])
 
-# --- TAB 1: JUDGE NEW TRACKS ---
-with tab1:
-  st.header("Rate and Review Unjudged Additions")
-  if not st.session_state.is_admin:
-    st.warning("⚠️ You are in **Viewer Mode**. You can view history, analytics, and tables below, but cannot submit judgements.")
-  
-  conn = sqlite3.connect(DB_FILE)
-  df_tracks = pd.read_sql(
-      "SELECT * FROM tracks WHERE score = 0 OR score IS NULL ORDER BY added_at DESC",
-      conn,
-  )
-  conn.close()
+# --- TAB 1: JUDGE NEW TRACKS (Admin Only) ---
+if tab1 is not None:
+  with tab1:
+    st.header("Rate and Review Unjudged Additions")
+    
+    conn = sqlite3.connect(DB_FILE)
+    df_tracks = pd.read_sql(
+        "SELECT * FROM tracks WHERE score = 0 OR score IS NULL ORDER BY added_at DESC",
+        conn,
+    )
+    conn.close()
 
-  if df_tracks.empty:
-    st.info("No unreviewed tracks left! Sync your playlist for new songs or insert mock data below.")
-    if st.session_state.is_admin and st.button("Generate Mock Data for Testing", key="mock_data_btn"):
-      conn = sqlite3.connect(DB_FILE)
-      cursor = conn.cursor()
-      cursor.execute("""
-                INSERT OR IGNORE INTO tracks (id, song_name, artist, uploader, uploader_display_name, image_url, added_at, score, is_saved, is_discovery)
-                VALUES 
-                ('1', 'Blinding Lights', 'The Weeknd', 'friend_alice', 'Alice Smith', 'https://i.scdn.co/image/ab67616d0000b2738863b24b16792a9ce3e715d0', '2026-06-01T10:00:00Z', 0, 0, 0),
-                ('2', 'Levitating', 'Dua Lipa', 'friend_bob', 'Bob Jones', 'https://i.scdn.co/image/ab67616d0000b2732e8f1c84133e082161b9a957', '2026-06-02T11:00:00Z', 0, 0, 0)
-            """)
-      conn.commit()
-      conn.close()
-      st.rerun()
-  else:
-    for index, row in df_tracks.iterrows():
-      uploader_name = row.get('uploader_display_name') or row.get('uploader', 'Unknown')
-      with st.expander(f"{row['song_name']} — {row['artist']} (Uploader: {uploader_name})"):
-        img_col, form_col = st.columns([1, 4])
+    if df_tracks.empty:
+      st.info("No unreviewed tracks left! Sync your playlist for new songs.")
+    else:
+      for index, row in df_tracks.iterrows():
+        uploader_name = row.get('uploader_display_name') or row.get('uploader', 'Unknown')
+        with st.expander(f"{row['song_name']} — {row['artist']} (Uploader: {uploader_name})"):
+          img_col, form_col = st.columns([1, 4])
 
-        with img_col:
-          if row.get("image_url"):
-            st.image(row["image_url"], width=130)
-          else:
-            st.caption("📷 No Cover")
+          with img_col:
+            if row.get("image_url"):
+              st.image(row["image_url"], width=130)
+            else:
+              st.caption("📷 No Cover")
 
-        with form_col:
-          col1, col2, col3 = st.columns(3)
-          with col1:
-            score = st.slider("Score (1-5)", 1, 5, 3, key=f"score_{row['id']}", disabled=not st.session_state.is_admin)
-          with col2:
-            is_saved = st.checkbox("Saved Song?", False, key=f"saved_{row['id']}", disabled=not st.session_state.is_admin)
-          with col3:
-            is_discovery = st.checkbox("Is a Discovery?", False, key=f"disc_{row['id']}", disabled=not st.session_state.is_admin)
+          with form_col:
+            col1, col2, col3 = st.columns(3)
+            with col1:
+              score = st.slider("Score (1-5)", 1, 5, 3, key=f"score_{row['id']}")
+            with col2:
+              is_saved = st.checkbox("Saved Song?", False, key=f"saved_{row['id']}")
+            with col3:
+              is_discovery = st.checkbox("Is a Discovery?", False, key=f"disc_{row['id']}")
 
-          if st.session_state.is_admin and st.button("Save Judgement", key=f"btn_{row['id']}"):
-            current_time = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-            conn = sqlite3.connect(DB_FILE)
-            cursor = conn.cursor()
+            if st.button("Save Judgement", key=f"btn_{row['id']}"):
+              current_time = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+              conn = sqlite3.connect(DB_FILE)
+              cursor = conn.cursor()
 
-            cursor.execute(
-                """
-                      UPDATE tracks 
-                      SET score = ?, is_saved = ?, is_discovery = ?, judged_at = ?
-                      WHERE id = ?
-                  """,
-                (score, int(is_saved), int(is_discovery), current_time, row["id"]),
-            )
+              cursor.execute(
+                  """
+                        UPDATE tracks 
+                        SET score = ?, is_saved = ?, is_discovery = ?, judged_at = ?
+                        WHERE id = ?
+                    """,
+                  (score, int(is_saved), int(is_discovery), current_time, row["id"]),
+              )
 
-            cursor.execute(
-                """
-                      INSERT INTO judgement_log (track_id, song_name, artist, image_url, score, is_saved, is_discovery, timestamp)
-                      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                  """,
-                (row["id"], row["song_name"], row["artist"], row.get("image_url", ""), score, int(is_saved), int(is_discovery), current_time),
-            )
+              cursor.execute(
+                  """
+                        INSERT INTO judgement_log (track_id, song_name, artist, image_url, score, is_saved, is_discovery, timestamp)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                  (row["id"], row["song_name"], row["artist"], row.get("image_url", ""), score, int(is_saved), int(is_discovery), current_time),
+              )
 
-            conn.commit()
-            conn.close()
+              conn.commit()
+              conn.close()
 
-            st.success(f"Judgement saved for '{row['song_name']}'!")
-            st.rerun()
+              st.success(f"Judgement saved for '{row['song_name']}'!")
+              st.rerun()
 
 # --- TAB 2: JUDGEMENT HISTORY (VERTICAL FEED) ---
 with tab2:
@@ -514,7 +514,13 @@ with tab2:
   st.caption("A History of Failures (and successes)")
 
   conn = sqlite3.connect(DB_FILE)
-  df_history = pd.read_sql("SELECT * FROM judgement_log ORDER BY id DESC", conn)
+  # Left join to fallback to tracks.image_url if missing in judgement_log
+  df_history = pd.read_sql("""
+      SELECT j.*, t.image_url as track_image_url 
+      FROM judgement_log j 
+      LEFT JOIN tracks t ON j.track_id = t.id 
+      ORDER BY j.id DESC
+  """, conn)
   conn.close()
 
   if df_history.empty:
@@ -524,9 +530,11 @@ with tab2:
       with st.container(border=True):
         col_img, col_details, col_actions = st.columns([1, 3.5, 1.2])
 
+        cover_url = log.get("image_url") or log.get("track_image_url")
+
         with col_img:
-          if log.get("image_url"):
-            st.image(log["image_url"], width=110)
+          if cover_url:
+            st.image(cover_url, width=110)
           else:
             st.caption("📷 No Cover")
 
@@ -556,11 +564,37 @@ with tab2:
               st.success(f"Reverted '{log['song_name']}'!")
               st.rerun()
           else:
-            st.caption("🔒 Admin mode required to undo")
+            st.caption("🔒 Admin mode required")
 
 # --- TAB 3: LIVE ANALYTICS ---
 with tab3:
   st.header("Performance Review")
+  
+  # Admin Uploader Renaming Tool
+  if st.session_state.is_admin:
+    with st.expander("✏️ Manage Uploader Display Names", expanded=False):
+      conn = sqlite3.connect(DB_FILE)
+      uploaders_df = pd.read_sql("SELECT DISTINCT uploader, uploader_display_name FROM tracks", conn)
+      conn.close()
+      
+      for _, u_row in uploaders_df.iterrows():
+        orig_id = u_row['uploader']
+        current_name = u_row['uploader_display_name'] or orig_id
+        
+        col_u1, col_u2 = st.columns([2, 1])
+        with col_u1:
+          new_display = st.text_input(f"Display name for: `{orig_id}`", value=current_name, key=f"rename_{orig_id}")
+        with col_u2:
+          st.markdown("<br>", unsafe_allow_html=True)
+          if st.button("Publish Name", key=f"pub_{orig_id}"):
+            conn = sqlite3.connect(DB_FILE)
+            cursor = conn.cursor()
+            cursor.execute("UPDATE tracks SET uploader_display_name = ? WHERE uploader = ?", (new_display, orig_id))
+            conn.commit()
+            conn.close()
+            st.success(f"Updated uploader name to '{new_display}'!")
+            st.rerun()
+
   conn = sqlite3.connect(DB_FILE)
   df = pd.read_sql("SELECT * FROM tracks", conn)
   conn.close()
@@ -590,9 +624,7 @@ with tab3:
     )
     analytics["Average Score"] = analytics["Average Score"].round(2)
 
-    st.subheader("Uploader Scorecard Summary")
-    
-    # Render scorecard as clean cards instead of a raw unstyled dataframe
+    # Render scorecard as clean cards with clear outlines
     for _, row in analytics.iterrows():
       with st.container(border=True):
         c1, c2, c3, c4, c5 = st.columns(5)
@@ -662,8 +694,23 @@ with tab4:
     if "Uploader" not in df_full.columns:
       df_full["Uploader"] = "Unknown"
 
-    # Render clean standard dataframe without harsh background tint colors
-    st.dataframe(df_full, hide_index=True, width="stretch")
+    # Restore uploader row color highlighting
+    unique_uploaders = df_full["Uploader"].unique()
+    palette = [
+        "rgba(59, 130, 246, 0.12)",
+        "rgba(34, 197, 94, 0.12)",
+        "rgba(234, 179, 8, 0.12)",
+        "rgba(239, 68, 68, 0.12)",
+        "rgba(168, 85, 247, 0.12)",
+    ]
+    uploader_color_map = {u: palette[i % len(palette)] for i, u in enumerate(unique_uploaders)}
+
+    def style_rows(row):
+      color = uploader_color_map.get(row["Uploader"], "")
+      return [f"background-color: {color}"] * len(row)
+
+    styled_df = df_full.style.apply(style_rows, axis=1)
+    st.dataframe(styled_df, hide_index=True, width="stretch")
 
     st.markdown("---")
     csv_data = df_full.to_csv(index=False).encode("utf-8")
