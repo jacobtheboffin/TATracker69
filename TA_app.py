@@ -1,5 +1,4 @@
 from datetime import datetime, timezone
-from urllib.parse import parse_qs, urlparse
 import altair as alt
 import sqlite3
 import pandas as pd
@@ -12,7 +11,10 @@ st.set_page_config(
     page_title="Objective Judgement Zone", page_icon="🎯", layout="wide"
 )
 
-# --- REFINED PREMIUM CSS THEME ---
+# EMBEDDED PLAYLIST CONFIGURATION
+EMBEDDED_PLAYLIST_ID = "7t0Gu2M5ZcwmVtidMb9RRR"
+
+# --- REFINED PREMIUM CSS THEME (FIXED TABS) ---
 st.markdown("""
     <style>
         /* Overall App Background & Text */
@@ -47,16 +49,12 @@ st.markdown("""
             font-size: 14px !important;
         }
 
-        /* Input Fields & Legible Placeholders */
+        /* Input Fields */
         .stTextInput input {
             background-color: #1a1d26 !important;
             color: #ffffff !important;
             border: 1px solid #2e3445 !important;
             border-radius: 8px !important;
-        }
-        .stTextInput input::placeholder {
-            color: #64748b !important;
-            opacity: 1 !important;
         }
         .stTextInput input:focus {
             border-color: #3b82f6 !important;
@@ -74,52 +72,55 @@ st.markdown("""
             z-index: 99999;
             background-color: #0d0e12 !important;
             padding-top: 12px;
-            padding-bottom: 12px;
-            margin-bottom: 20px;
+            padding-bottom: 16px;
+            margin-bottom: 24px;
         }
         .stTabs [data-baseweb="tab-list"] {
             background-color: #14161b !important;
-            border: 1px solid #232631;
-            border-radius: 14px;
-            padding: 8px;
-            gap: 12px;
+            border: 1px solid #2b3040 !important;
+            border-radius: 18px !important;
+            padding: 10px !important;
+            gap: 16px !important;
         }
 
-        /* Spacious & Readable Tabs */
+        /* Smooth, Spacious & Highly Visible Navigation Pills */
         .stTabs [data-baseweb="tab"] {
-            font-size: 16px !important;
+            font-size: 17px !important;
             font-weight: 600 !important;
-            padding: 14px 28px !important;
-            color: #cbd5e1 !important;
-            border-radius: 12px !important;
-            background-color: #1a1d26 !important;
-            border: 1px solid #2e3445 !important;
-            transition: all 0.2s ease;
+            padding: 16px 36px !important; /* Generous breathing room around text */
+            color: #e2e8f0 !important;     /* Bright readable text when unselected */
+            border-radius: 16px !important;/* Smooth rounded pill shape */
+            background-color: #1e2230 !important; /* Soft dark container for contrast */
+            border: 1px solid #33394d !important;
+            transition: all 0.25s ease-in-out !important;
+            margin: 0px !important;
         }
         .stTabs [data-baseweb="tab"]:hover {
             color: #ffffff !important;
-            background-color: #252a37 !important;
-            border-color: #3b82f6 !important;
+            background-color: #2a3145 !important;
+            border-color: #60a5fa !important;
+            transform: translateY(-1px);
         }
         .stTabs [aria-selected="true"] {
             color: #ffffff !important;
-            background-color: #3b82f6 !important;
-            border: 1px solid #60a5fa !important;
+            background-color: #3b82f6 !important; /* Vibrant primary accent */
+            border: 1px solid #93c5fd !important;
             font-weight: 700 !important;
-            box-shadow: 0 4px 14px rgba(59, 130, 246, 0.4);
+            box-shadow: 0 4px 16px rgba(59, 130, 246, 0.4) !important;
         }
 
-        /* Undo Button Soft Blend */
+        /* Legible Undo Button Styling */
         button[key*="undo_"] {
-            background-color: #1e2230 !important;
-            color: #cbd5e1 !important;
-            border: 1px solid #33394d !important;
+            background-color: #1f1a1a !important;
+            color: #fca5a5 !important;
+            border: 1px solid #ef4444 !important;
             border-radius: 6px !important;
+            font-weight: 600 !important;
         }
         button[key*="undo_"]:hover {
-            background-color: #2a3142 !important;
+            background-color: #dc2626 !important;
             color: #ffffff !important;
-            border-color: #ef4444 !important;
+            border-color: #f87171 !important;
         }
 
         /* CSV Download Button Styling */
@@ -140,12 +141,11 @@ st.markdown("""
 
 DB_FILE = "spotify_tracker.db"
 
-# Initialize Database Safely
+# Initialize Database Safely with all required columns
 def init_db():
   conn = sqlite3.connect(DB_FILE)
   cursor = conn.cursor()
   
-  # Create base tables if they don't exist
   cursor.execute("""
         CREATE TABLE IF NOT EXISTS tracks (
             id TEXT PRIMARY KEY,
@@ -176,13 +176,14 @@ def init_db():
         )
     """)
 
-  # Safely check and add 'image_url' column to tracks if missing
+  # Safely ensure missing columns exist on older DB files
   cursor.execute("PRAGMA table_info(tracks)")
   track_columns = [col[1] for col in cursor.fetchall()]
+  if "uploader_display_name" not in track_columns:
+    cursor.execute("ALTER TABLE tracks ADD COLUMN uploader_display_name TEXT")
   if "image_url" not in track_columns:
     cursor.execute("ALTER TABLE tracks ADD COLUMN image_url TEXT")
 
-  # Safely check and add 'image_url' column to judgement_log if missing
   cursor.execute("PRAGMA table_info(judgement_log)")
   log_columns = [col[1] for col in cursor.fetchall()]
   if "image_url" not in log_columns:
@@ -211,10 +212,10 @@ def fetch_user_display_name(client_id, client_secret, user_id):
   except Exception:
     return user_id
 
-# --- SPOTIFY SYNC LOGIC ---
-def sync_spotify_playlist(playlist_url, client_id, client_secret, exclude_self):
-  if not client_id or not client_secret or not playlist_url:
-    return 0, 0, 0, ["⚠️ Please fill in all credentials and the Playlist URL."]
+# --- SPOTIFY SYNC LOGIC (Using Embedded Playlist) ---
+def sync_spotify_playlist(client_id, client_secret, exclude_self):
+  if not client_id or not client_secret:
+    return 0, 0, 0, ["⚠️ Please fill in your Spotify Client ID and Client Secret."]
 
   skip_reasons = []
 
@@ -238,27 +239,7 @@ def sync_spotify_playlist(playlist_url, client_id, client_secret, exclude_self):
     except Exception:
       pass
 
-    cleaned_url = playlist_url.strip()
-    if not cleaned_url:
-      return 0, 0, 0, ["⚠️ Playlist URL/ID field is empty."]
-
-    if "l.facebook.com/l.php" in cleaned_url:
-      parsed_url = urlparse(cleaned_url)
-      query_params = parse_qs(parsed_url.query)
-      if "u" in query_params:
-        cleaned_url = query_params["u"][0]
-
-    if "spotify.com/playlist/" in cleaned_url:
-      playlist_id = cleaned_url.split("playlist/")[1].split("?")[0].split("/")[0]
-    elif cleaned_url.startswith("spotify:playlist:"):
-      playlist_id = cleaned_url.split(":")[-1].split("?")[0]
-    else:
-      playlist_id = cleaned_url.split("?")[0].strip("/")
-
-    if not playlist_id:
-      return 0, 0, 0, ["⚠️ Could not extract a valid playlist ID. Check your URL."]
-
-    results = sp.playlist_items(playlist_id, market=user_market)
+    results = sp.playlist_items(EMBEDDED_PLAYLIST_ID, market=user_market)
     items = results.get("items", [])
     total_found = len(items)
 
@@ -336,8 +317,6 @@ def sync_spotify_playlist(playlist_url, client_id, client_secret, exclude_self):
 st.title("🎯 Objective Judgement Zone")
 
 # Initialize Session State
-if "playlist_url" not in st.session_state:
-  st.session_state.playlist_url = ""
 if "client_id" not in st.session_state:
   st.session_state.client_id = ""
 if "client_secret" not in st.session_state:
@@ -366,11 +345,6 @@ else:
     st.sidebar.info("👁️ Viewer Mode (Read-Only)")
 
 st.sidebar.header("⚙️ Settings & Sync")
-st.session_state.playlist_url = st.sidebar.text_input(
-    "Spotify Playlist URL / ID",
-    value=st.session_state.playlist_url,
-    placeholder="https://open.spotify.com/playlist/...",
-)
 st.session_state.client_id = st.sidebar.text_input(
     "Spotify Client ID",
     value=st.session_state.client_id,
@@ -394,7 +368,6 @@ if st.sidebar.button("🔄 Sync Playlist Now", type="primary", key="sync_playlis
   else:
     with st.spinner("Fetching updates from Spotify..."):
       total_found, added, skipped, reasons = sync_spotify_playlist(
-          st.session_state.playlist_url,
           st.session_state.client_id,
           st.session_state.client_secret,
           exclude_self,
@@ -518,7 +491,6 @@ with tab2:
   st.caption("A History of Failures (and successes)")
 
   conn = sqlite3.connect(DB_FILE)
-  # Left join to fallback to tracks.image_url if missing in judgement_log
   df_history = pd.read_sql("""
       SELECT j.*, t.image_url as track_image_url 
       FROM judgement_log j 
@@ -574,7 +546,6 @@ with tab2:
 with tab3:
   st.header("Performance Review")
   
-  # Admin Uploader Renaming Tool
   if st.session_state.is_admin:
     with st.expander("✏️ Manage Uploader Display Names", expanded=False):
       conn = sqlite3.connect(DB_FILE)
@@ -628,7 +599,6 @@ with tab3:
     )
     analytics["Average Score"] = analytics["Average Score"].round(2)
 
-    # Render scorecard as clean cards with clear outlines
     for _, row in analytics.iterrows():
       with st.container(border=True):
         c1, c2, c3, c4, c5 = st.columns(5)
@@ -698,7 +668,6 @@ with tab4:
     if "Uploader" not in df_full.columns:
       df_full["Uploader"] = "Unknown"
 
-    # Restore uploader row color highlighting
     unique_uploaders = df_full["Uploader"].unique()
     palette = [
         "rgba(59, 130, 246, 0.12)",
