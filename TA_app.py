@@ -12,37 +12,51 @@ st.set_page_config(
     page_title="Objective Judgement Zone", page_icon="🎯", layout="wide"
 )
 
-# --- CUSTOM CSS: SOFTER GRAPHITE THEME, LEGIBLE LABELS & STICKY TABS ---
+# --- REFINED PREMIUM CSS THEME ---
 st.markdown("""
     <style>
         /* Overall App Background & Text */
         .stApp, [data-testid="stAppViewContainer"], [data-testid="stHeader"] {
-            background-color: #121316 !important;
-            color: #e1e3e8 !important;
+            background-color: #0d0e12 !important;
+            color: #f1f3f7 !important;
         }
 
         /* Sidebar Styling */
         [data-testid="stSidebar"] {
-            background-color: #1a1c23 !important;
-            border-right: 1px solid #2a2d37 !important;
+            background-color: #14161b !important;
+            border-right: 1px solid #232631 !important;
+            padding-top: 1rem;
         }
         
-        /* Sidebar Text Box Titles & Input Labels */
-        [data-testid="stSidebar"] label, .stTextInput label, .stCheckbox label {
-            color: #8ab4f8 !important;
-            font-weight: 600 !important;
-            font-size: 15px !important;
+        /* Sidebar Section Headers */
+        [data-testid="stSidebar"] h2 {
+            color: #ffffff !important;
+            font-size: 1.15rem !important;
+            font-weight: 700 !important;
+            border-bottom: 2px solid #3b82f6 !important;
+            padding-bottom: 6px !important;
+            margin-top: 1.5rem !important;
+            margin-bottom: 1rem !important;
+            letter-spacing: 0.5px;
         }
 
-        /* Input Fields Softer Background */
+        /* Sidebar Labels & Text Box Titles */
+        [data-testid="stSidebar"] label, .stTextInput label, .stCheckbox label {
+            color: #cbd5e1 !important;
+            font-weight: 500 !important;
+            font-size: 14px !important;
+        }
+
+        /* Input Fields */
         .stTextInput input {
-            background-color: #22252e !important;
+            background-color: #1a1d26 !important;
             color: #ffffff !important;
-            border: 1px solid #3a3f4d !important;
-            border-radius: 6px !important;
+            border: 1px solid #2e3445 !important;
+            border-radius: 8px !important;
         }
         .stTextInput input:focus {
-            border-color: #8ab4f8 !important;
+            border-color: #3b82f6 !important;
+            box-shadow: 0 0 0 1px #3b82f6 !important;
         }
 
         /* Viewport Sticky Tabs Container */
@@ -54,52 +68,66 @@ st.markdown("""
             position: sticky;
             top: 0px;
             z-index: 99999;
-            background-color: #121316 !important;
-            padding-top: 15px;
+            background-color: #0d0e12 !important;
+            padding-top: 12px;
             padding-bottom: 12px;
-            margin-bottom: 25px;
+            margin-bottom: 20px;
         }
         .stTabs [data-baseweb="tab-list"] {
-            background-color: #121316 !important;
-            border-bottom: 2px solid #2a2d37;
-            gap: 12px;
+            background-color: #14161b !important;
+            border: 1px solid #232631;
+            border-radius: 14px;
+            padding: 6px;
+            gap: 8px;
         }
 
-        /* Tab Buttons Outline & Typography */
+        /* Smooth Pill Tabs & Unselected Titles Fix */
         .stTabs [data-baseweb="tab"] {
-            font-size: 21px !important;
-            font-weight: 800 !important;
-            padding: 10px 24px !important;
-            color: #a0a6b5 !important;
-            border-radius: 8px 8px 0px 0px;
-            text-shadow: 0px 1px 2px rgba(0,0,0,0.8);
-            border: 1px solid transparent;
+            font-size: 16px !important;
+            font-weight: 600 !important;
+            padding: 10px 20px !important;
+            color: #94a3b8 !important;
+            border-radius: 10px !important;
+            border: none !important;
+            background-color: transparent !important;
+            transition: all 0.2s ease;
+        }
+        .stTabs [data-baseweb="tab"]:hover {
+            color: #ffffff !important;
+            background-color: #1e2230 !important;
         }
         .stTabs [aria-selected="true"] {
             color: #ffffff !important;
-            background-color: #1f222b !important;
-            border: 1px solid #3a3f4d !important;
-            border-bottom: 3px solid #8ab4f8 !important;
-        }
-
-        /* Cards & Container Styling */
-        [data-testid="stMetricValue"] {
-            color: #8ab4f8 !important;
-        }
-
-        /* CSV Download Button Styling Fix */
-        .stDownloadButton button {
-            background-color: #1e3a29 !important;
-            color: #ffffff !important;
-            border: 1px solid #34a853 !important;
+            background-color: #3b82f6 !important;
             font-weight: 700 !important;
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+        }
+
+        /* Undo Button Soft Blend */
+        button[key*="undo_"] {
+            background-color: #1e2230 !important;
+            color: #cbd5e1 !important;
+            border: 1px solid #33394d !important;
+            border-radius: 6px !important;
+        }
+        button[key*="undo_"]:hover {
+            background-color: #2a3142 !important;
+            color: #ffffff !important;
+            border-color: #ef4444 !important;
+        }
+
+        /* CSV Download Button Styling */
+        .stDownloadButton button {
+            background-color: #166534 !important;
+            color: #ffffff !important;
+            border: 1px solid #22c55e !important;
+            font-weight: 600 !important;
             padding: 10px 20px !important;
             border-radius: 8px !important;
         }
         .stDownloadButton button:hover {
-            background-color: #275239 !important;
-            border-color: #46d168 !important;
-            color: #ffffff !important;
+            background-color: #15803d !important;
+            border-color: #4ade80 !important;
         }
     </style>
 """, unsafe_allow_html=True)
@@ -126,7 +154,6 @@ def init_db():
         )
     """)
   
-  # Auto-migrate image_url column if missing from older databases
   cursor.execute("PRAGMA table_info(tracks)")
   columns = [col[1] for col in cursor.fetchall()]
   if "image_url" not in columns:
@@ -156,7 +183,6 @@ def init_db():
 
 init_db()
 
-# Helper to fetch Spotify user display name cleanly
 @st.cache_data(show_spinner=False, ttl=3600)
 def fetch_user_display_name(client_id, client_secret, user_id):
   if not user_id or user_id == "unknown":
@@ -250,7 +276,6 @@ def sync_spotify_playlist(playlist_url, client_id, client_secret, exclude_self):
         if artists_list:
           artist = ", ".join([ar.get("name", "Unknown") for ar in artists_list])
         
-        # Extract Album Art URL
         album = track_info.get("album", {})
         images = album.get("images", [])
         if images:
@@ -287,6 +312,8 @@ def sync_spotify_playlist(playlist_url, client_id, client_secret, exclude_self):
         new_count += 1
         skip_reasons.append(f"✅ '{song_name}' by {artist} — Successfully Added!")
       else:
+        # Update image_url if missing on existing record
+        cursor.execute("UPDATE tracks SET image_url = ? WHERE id = ? AND (image_url IS NULL OR image_url = '')", (image_url, track_id))
         skipped_count += 1
         skip_reasons.append(f"⚠️ '{song_name}' — Skipped: Already exists in database")
 
@@ -318,7 +345,7 @@ st.sidebar.header("🔐 Access Control")
 
 if st.session_state.is_admin:
   st.sidebar.success("🔓 Admin Mode Active")
-  if st.sidebar.button("🔒 Exit Admin Mode / Logout", key="logout_btn"):
+  if st.sidebar.button("🔒 Exit Admin Mode", key="logout_btn"):
     st.session_state.is_admin = False
     st.rerun()
 else:
@@ -397,7 +424,7 @@ if st.session_state.last_sync_log:
     for log_entry in st.session_state.last_sync_log:
       st.write(log_entry)
 
-# Navigation Tabs (Sticky & Larger via CSS)
+# Navigation Tabs
 tab1, tab2, tab3, tab4 = st.tabs([
     "🎯 Judge New Tracks",
     "📜 Judgement History",
@@ -481,7 +508,7 @@ with tab1:
             st.success(f"Judgement saved for '{row['song_name']}'!")
             st.rerun()
 
-# --- TAB 2: JUDGEMENT HISTORY (CLEAN VERTICAL FEED WITH ALBUM ART & CHECKBOXES) ---
+# --- TAB 2: JUDGEMENT HISTORY (VERTICAL FEED) ---
 with tab2:
   st.header("📜 Live Judgement History Feed")
   st.caption("A History of Failures (and successes)")
@@ -508,7 +535,6 @@ with tab2:
           st.markdown(f"**Artist:** *{log['artist']}*")
           st.markdown(f"**Score Given:** ⭐ `{log['score']} / 5`")
           
-          # Characteristics formatted cleanly as vertical tick boxes
           st.checkbox("Saved Song", value=bool(log["is_saved"]), disabled=True, key=f"feed_saved_{log['id']}")
           st.checkbox("Discovery Track", value=bool(log["is_discovery"]), disabled=True, key=f"feed_disc_{log['id']}")
           
@@ -565,7 +591,21 @@ with tab3:
     analytics["Average Score"] = analytics["Average Score"].round(2)
 
     st.subheader("Uploader Scorecard Summary")
-    st.dataframe(analytics, hide_index=True, width="stretch")
+    
+    # Render scorecard as clean cards instead of a raw unstyled dataframe
+    for _, row in analytics.iterrows():
+      with st.container(border=True):
+        c1, c2, c3, c4, c5 = st.columns(5)
+        with c1:
+          st.markdown(f"**Uploader**\n### {row['Uploader']}")
+        with c2:
+          st.markdown(f"**Total Uploads**\n### {row['Total Uploads']}")
+        with c3:
+          st.markdown(f"**Average Score**\n### ⭐ {row['Average Score']}")
+        with c4:
+          st.markdown(f"**Total Saves**\n### 💾 {row['Total Saves']}")
+        with c5:
+          st.markdown(f"**Discoveries**\n### ✨ {row['Total Discoveries']}")
 
     st.subheader("Objectivity Distribution")
     df_judged = df[df["score"] > 0]
@@ -577,15 +617,15 @@ with tab3:
           y=alt.Y("score:Q", title="Score", scale=alt.Scale(domain=[0.5, 5.5])),
           color=alt.Color("uploader_display_name:N", legend=None),
       )
-      boxplot = base.mark_boxplot(opacity=0.5, color="#8ab4f8")
-      points = base.mark_circle(size=80, opacity=0.85, color="#34a853")
+      boxplot = base.mark_boxplot(opacity=0.5, color="#3b82f6")
+      points = base.mark_circle(size=80, opacity=0.85, color="#22c55e")
       
       chart = (boxplot + points).properties(
           background="transparent"
       ).configure_axis(
-          labelColor="#e1e3e8",
-          titleColor="#8ab4f8",
-          gridColor="#2a2d37"
+          labelColor="#cbd5e1",
+          titleColor="#94a3b8",
+          gridColor="#232631"
       ).configure_view(
           stroke="transparent"
       )
@@ -605,7 +645,6 @@ with tab4:
     if "uploader_display_name" not in df_full.columns:
       df_full["uploader_display_name"] = df_full.get("uploader", "Unknown")
 
-    # Clean up internal columns for display
     cols_to_drop = [c for c in ["id", "uploader", "image_url"] if c in df_full.columns]
     df_full = df_full.drop(columns=cols_to_drop)
 
@@ -623,22 +662,8 @@ with tab4:
     if "Uploader" not in df_full.columns:
       df_full["Uploader"] = "Unknown"
 
-    unique_uploaders = df_full["Uploader"].unique()
-    palette = [
-        "rgba(138, 180, 248, 0.12)",
-        "rgba(52, 168, 83, 0.12)",
-        "rgba(251, 188, 4, 0.12)",
-        "rgba(234, 67, 53, 0.12)",
-        "rgba(171, 71, 188, 0.12)",
-    ]
-    uploader_color_map = {u: palette[i % len(palette)] for i, u in enumerate(unique_uploaders)}
-
-    def style_rows(row):
-      color = uploader_color_map.get(row["Uploader"], "")
-      return [f"background-color: {color}"] * len(row)
-
-    styled_df = df_full.style.apply(style_rows, axis=1)
-    st.dataframe(styled_df, hide_index=True, width="stretch")
+    # Render clean standard dataframe without harsh background tint colors
+    st.dataframe(df_full, hide_index=True, width="stretch")
 
     st.markdown("---")
     csv_data = df_full.to_csv(index=False).encode("utf-8")
