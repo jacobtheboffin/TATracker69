@@ -16,13 +16,18 @@ SPOTIFY_CLIENT_ID = "YOUR_CLIENT_ID_HERE"
 SPOTIFY_CLIENT_SECRET = "YOUR_CLIENT_SECRET_HERE"
 EMBEDDED_PLAYLIST_ID = "7t0Gu2M5ZcwmVtidMb9RRR"
 
-# --- REFINED PREMIUM CSS THEME ---
+# --- REFINED PREMIUM CSS THEME (CONTRAST & BUTTON FIXES) ---
 st.markdown("""
     <style>
-        /* Overall App Background & Text */
+        /* Overall App Background & Bright Readable Text */
         .stApp, [data-testid="stAppViewContainer"], [data-testid="stHeader"] {
             background-color: #0d0e12 !important;
-            color: #f1f3f7 !important;
+            color: #ffffff !important;
+        }
+
+        /* General Typography & Headers */
+        p, span, label, h1, h2, h3, h4, h5, h6, .stMarkdown {
+            color: #f8fafc !important;
         }
 
         /* Sidebar Styling */
@@ -30,12 +35,6 @@ st.markdown("""
             background-color: #14161b !important;
             border-right: 1px solid #232631 !important;
             padding-top: 1rem;
-        }
-        
-        [data-testid="stSidebar"] label, .stTextInput label, .stCheckbox label {
-            color: #cbd5e1 !important;
-            font-weight: 500 !important;
-            font-size: 14px !important;
         }
 
         /* Viewport Sticky Tabs Container */
@@ -63,11 +62,11 @@ st.markdown("""
         /* Spacious, Soft-Cornered, High-Contrast Navigation Pills */
         .stTabs [data-baseweb="tab"] {
             font-size: 17px !important;
-            font-weight: 600 !important;
-            padding: 18px 40px !important; /* Generous space between text and border */
-            color: #f8fafc !important;     /* High visibility for unselected state */
-            border-radius: 20px !important;/* Smooth rounded corners */
-            background-color: #1e2530 !important; /* Rich contrast background */
+            font-weight: 700 !important;
+            padding: 18px 36px !important;
+            color: #ffffff !important;     
+            border-radius: 20px !important;
+            background-color: #1e2530 !important; 
             border: 1px solid #374151 !important;
             transition: all 0.25s ease-in-out !important;
         }
@@ -79,31 +78,37 @@ st.markdown("""
         }
         .stTabs [aria-selected="true"] {
             color: #ffffff !important;
-            background-color: #2563eb !important; /* Vibrant primary accent */
+            background-color: #2563eb !important; 
             border: 1px solid #93c5fd !important;
-            font-weight: 700 !important;
+            font-weight: 800 !important;
             box-shadow: 0 4px 20px rgba(37, 99, 235, 0.5) !important;
         }
 
-        /* Soft Feed Score Styling */
-        .feed-score {
-            color: #94a3b8 !important;
-            font-weight: 500;
-            font-size: 15px;
+        /* Global Button Overhaul (Fixes bright white washed-out buttons) */
+        .stButton button, button {
+            background-color: #1e2530 !important;
+            color: #ffffff !important;
+            border: 1px solid #4b5563 !important;
+            border-radius: 10px !important;
+            font-weight: 600 !important;
+            padding: 8px 18px !important;
+            transition: all 0.2s ease;
+        }
+        .stButton button:hover, button:hover {
+            background-color: #2a3447 !important;
+            border-color: #60a5fa !important;
+            color: #ffffff !important;
         }
 
-        /* Legible Undo Button Styling */
+        /* Specific Undo Button Styling */
         button[key*="undo_"] {
             background-color: #2b1f1f !important;
             color: #fca5a5 !important;
             border: 1px solid #ef4444 !important;
-            border-radius: 8px !important;
-            font-weight: 600 !important;
         }
         button[key*="undo_"]:hover {
             background-color: #dc2626 !important;
             color: #ffffff !important;
-            border-color: #f87171 !important;
         }
 
         /* CSV Download Button Styling */
@@ -111,13 +116,17 @@ st.markdown("""
             background-color: #166534 !important;
             color: #ffffff !important;
             border: 1px solid #22c55e !important;
-            font-weight: 600 !important;
-            padding: 10px 20px !important;
-            border-radius: 8px !important;
         }
         .stDownloadButton button:hover {
             background-color: #15803d !important;
             border-color: #4ade80 !important;
+        }
+
+        /* Soft Feed Score Styling */
+        .feed-score {
+            color: #cbd5e1 !important;
+            font-weight: 600;
+            font-size: 15px;
         }
     </style>
 """, unsafe_allow_html=True)
@@ -283,7 +292,7 @@ st.title("🎯 Objective Judgement Zone")
 if "is_admin" not in st.session_state:
   st.session_state.is_admin = False
 
-# Navigation Tabs (Includes Access Control tab)
+# Navigation Tabs
 if st.session_state.is_admin:
   tab1, tab2, tab3, tab4, tab5 = st.tabs([
       "🎯 Judge New Tracks",
@@ -456,7 +465,6 @@ with tab3:
     )
     analytics["Average Score"] = analytics["Average Score"].round(2)
 
-    # Render scorecard as clean cards with clear outlines
     for _, row in analytics.iterrows():
       with st.container(border=True):
         c1, c2, c3, c4, c5 = st.columns(5)
@@ -487,7 +495,7 @@ with tab3:
       chart = (boxplot + points).properties(
           background="transparent"
       ).configure_axis(
-          labelColor="#cbd5e1",
+          labelColor="#ffffff",
           titleColor="#94a3b8",
           gridColor="#232631"
       ).configure_view(
@@ -514,12 +522,14 @@ with tab4:
     cols_to_drop = [c for c in ["id", "uploader", "image_url"] if c in df_full.columns]
     df_full = df_full.drop(columns=cols_to_drop)
 
+    # Rename added_at to Added as requested
     if "added_at" in df_full.columns:
       df_full["added_at"] = (
           pd.to_datetime(df_full["added_at"], errors="coerce")
           .dt.strftime("%Y-%m-%d")
           .fillna(df_full["added_at"])
       )
+      df_full = df_full.rename(columns={"added_at": "Added"})
 
     if "uploader_display_name" in df_full.columns:
       cols = ["uploader_display_name"] + [col for col in df_full.columns if col != "uploader_display_name"]
@@ -530,11 +540,11 @@ with tab4:
 
     unique_uploaders = df_full["Uploader"].unique()
     palette = [
-        "rgba(59, 130, 246, 0.12)",
-        "rgba(34, 197, 94, 0.12)",
-        "rgba(234, 179, 8, 0.12)",
-        "rgba(239, 68, 68, 0.12)",
-        "rgba(168, 85, 247, 0.12)",
+        "rgba(59, 130, 246, 0.15)",
+        "rgba(34, 197, 94, 0.15)",
+        "rgba(234, 179, 8, 0.15)",
+        "rgba(239, 68, 68, 0.15)",
+        "rgba(168, 85, 247, 0.15)",
     ]
     uploader_color_map = {u: palette[i % len(palette)] for i, u in enumerate(unique_uploaders)}
 
@@ -578,7 +588,7 @@ with tab5:
       
       col_u1, col_u2 = st.columns([2, 1])
       with col_u1:
-        new_display = st.text_input(f"Display name for uploader ID: `{orig_id}`", value=current_name, key=f"rename_{orig_id}")
+        new_display = st.text_input(f"Display name for uploader ID: `{orig_id}`", value=str(current_name), key=f"rename_{orig_id}")
       with col_u2:
         st.markdown("<br>", unsafe_allow_html=True)
         if st.button("Publish Name", key=f"pub_{orig_id}"):
