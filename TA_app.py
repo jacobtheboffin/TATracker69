@@ -12,50 +12,93 @@ st.set_page_config(
     page_title="Objective Judgement Zone", page_icon="🎯", layout="wide"
 )
 
-# --- STICKY & LARGER TABS CSS (PITCH BLACK THEME) ---
+# --- CUSTOM CSS: SOFTER GRAPHITE THEME, LEGIBLE LABELS & STICKY TABS ---
 st.markdown("""
     <style>
-        /* Force entire app and background to pitch black */
+        /* Overall App Background & Text */
         .stApp, [data-testid="stAppViewContainer"], [data-testid="stHeader"] {
-            background-color: #000000 !important;
-            color: #ffffff !important;
+            background-color: #121316 !important;
+            color: #e1e3e8 !important;
+        }
+
+        /* Sidebar Styling */
+        [data-testid="stSidebar"] {
+            background-color: #1a1c23 !important;
+            border-right: 1px solid #2a2d37 !important;
         }
         
-        /* Force sidebar background to dark */
-        [data-testid="stSidebar"] {
-            background-color: #0c0c0c !important;
+        /* Sidebar Text Box Titles & Input Labels */
+        [data-testid="stSidebar"] label, .stTextInput label, .stCheckbox label {
+            color: #8ab4f8 !important;
+            font-weight: 600 !important;
+            font-size: 15px !important;
+        }
+
+        /* Input Fields Softer Background */
+        .stTextInput input {
+            background-color: #22252e !important;
             color: #ffffff !important;
+            border: 1px solid #3a3f4d !important;
+            border-radius: 6px !important;
+        }
+        .stTextInput input:focus {
+            border-color: #8ab4f8 !important;
         }
 
-        /* Allow sticky positioning to lock to the browser viewport */
-        .main {
+        /* Viewport Sticky Tabs Container */
+        .main, .block-container {
             overflow: visible !important;
-        }
-        .block-container {
-            overflow: visible !important;
-            background-color: #000000 !important;
         }
 
-        /* Make navigation tabs sticky at the top of the screen */
         .stTabs {
             position: sticky;
             top: 0px;
             z-index: 99999;
-            background-color: #000000 !important;
+            background-color: #121316 !important;
             padding-top: 15px;
-            padding-bottom: 10px;
-            margin-bottom: 20px;
+            padding-bottom: 12px;
+            margin-bottom: 25px;
         }
         .stTabs [data-baseweb="tab-list"] {
-            background-color: #000000 !important;
-            border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+            background-color: #121316 !important;
+            border-bottom: 2px solid #2a2d37;
+            gap: 12px;
         }
-        /* Make tabs larger and bolder */
+
+        /* Tab Buttons Outline & Typography */
         .stTabs [data-baseweb="tab"] {
-            font-size: 20px !important;
-            font-weight: 700;
-            padding-left: 28px;
-            padding-right: 28px;
+            font-size: 21px !important;
+            font-weight: 800 !important;
+            padding: 10px 24px !important;
+            color: #a0a6b5 !important;
+            border-radius: 8px 8px 0px 0px;
+            text-shadow: 0px 1px 2px rgba(0,0,0,0.8);
+            border: 1px solid transparent;
+        }
+        .stTabs [aria-selected="true"] {
+            color: #ffffff !important;
+            background-color: #1f222b !important;
+            border: 1px solid #3a3f4d !important;
+            border-bottom: 3px solid #8ab4f8 !important;
+        }
+
+        /* Cards & Container Styling */
+        [data-testid="stMetricValue"] {
+            color: #8ab4f8 !important;
+        }
+
+        /* CSV Download Button Styling Fix */
+        .stDownloadButton button {
+            background-color: #1e3a29 !important;
+            color: #ffffff !important;
+            border: 1px solid #34a853 !important;
+            font-weight: 700 !important;
+            padding: 10px 20px !important;
+            border-radius: 8px !important;
+        }
+        .stDownloadButton button:hover {
+            background-color: #275239 !important;
+            border-color: #46d168 !important;
             color: #ffffff !important;
         }
     </style>
@@ -74,6 +117,7 @@ def init_db():
             artist TEXT,
             uploader TEXT,
             uploader_display_name TEXT,
+            image_url TEXT,
             added_at TEXT,
             score INTEGER DEFAULT 0,
             is_saved INTEGER DEFAULT 0,
@@ -81,18 +125,32 @@ def init_db():
             judged_at TEXT
         )
     """)
+  
+  # Auto-migrate image_url column if missing from older databases
+  cursor.execute("PRAGMA table_info(tracks)")
+  columns = [col[1] for col in cursor.fetchall()]
+  if "image_url" not in columns:
+    cursor.execute("ALTER TABLE tracks ADD COLUMN image_url TEXT")
+
   cursor.execute("""
         CREATE TABLE IF NOT EXISTS judgement_log (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             track_id TEXT,
             song_name TEXT,
             artist TEXT,
+            image_url TEXT,
             score INTEGER,
             is_saved INTEGER,
             is_discovery INTEGER,
             timestamp TEXT
         )
     """)
+  
+  cursor.execute("PRAGMA table_info(judgement_log)")
+  log_cols = [col[1] for col in cursor.fetchall()]
+  if "image_url" not in log_cols:
+    cursor.execute("ALTER TABLE judgement_log ADD COLUMN image_url TEXT")
+
   conn.commit()
   conn.close()
 
@@ -183,6 +241,7 @@ def sync_spotify_playlist(playlist_url, client_id, client_secret, exclude_self):
       track_id = None
       song_name = "Unknown Track"
       artist = "Unknown Artist"
+      image_url = ""
 
       if track_info and isinstance(track_info, dict):
         track_id = track_info.get("id")
@@ -190,6 +249,12 @@ def sync_spotify_playlist(playlist_url, client_id, client_secret, exclude_self):
         artists_list = track_info.get("artists", [])
         if artists_list:
           artist = ", ".join([ar.get("name", "Unknown") for ar in artists_list])
+        
+        # Extract Album Art URL
+        album = track_info.get("album", {})
+        images = album.get("images", [])
+        if images:
+          image_url = images[0].get("url", "")
 
       if not track_id and item_uri and "spotify:track:" in item_uri:
         track_id = item_uri.split(":")[-1]
@@ -214,10 +279,10 @@ def sync_spotify_playlist(playlist_url, client_id, client_secret, exclude_self):
         display_name = fetch_user_display_name(client_id, client_secret, added_by)
         cursor.execute(
             """
-                INSERT INTO tracks (id, song_name, artist, uploader, uploader_display_name, added_at, score, is_saved, is_discovery)
-                VALUES (?, ?, ?, ?, ?, ?, 0, 0, 0)
+                INSERT INTO tracks (id, song_name, artist, uploader, uploader_display_name, image_url, added_at, score, is_saved, is_discovery)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, 0)
             """,
-            (track_id, song_name, artist, added_by, display_name, added_at),
+            (track_id, song_name, artist, added_by, display_name, image_url, added_at),
         )
         new_count += 1
         skip_reasons.append(f"✅ '{song_name}' by {artist} — Successfully Added!")
@@ -250,17 +315,23 @@ if "is_admin" not in st.session_state:
 
 # --- SIDEBAR: ACCESS CONTROL & SETTINGS ---
 st.sidebar.header("🔐 Access Control")
-admin_pass = st.sidebar.text_input("Admin Password / Passcode", type="password")
-if admin_pass == "admin123": 
-  st.session_state.is_admin = True
-  st.sidebar.success("🔓 Admin Mode Active (Full Control)")
+
+if st.session_state.is_admin:
+  st.sidebar.success("🔓 Admin Mode Active")
+  if st.sidebar.button("🔒 Exit Admin Mode / Logout", key="logout_btn"):
+    st.session_state.is_admin = False
+    st.rerun()
 else:
-  st.session_state.is_admin = False
-  st.sidebar.info("👁️ Viewer Mode (Read-Only)")
+  admin_pass = st.sidebar.text_input("Admin Password", type="password", key="admin_pass_input")
+  if admin_pass == "admin123": 
+    st.session_state.is_admin = True
+    st.rerun()
+  else:
+    st.sidebar.info("👁️ Viewer Mode (Read-Only)")
 
 st.sidebar.header("⚙️ Settings & Sync")
 st.session_state.playlist_url = st.sidebar.text_input(
-    "Spotify Playlist URL/ID",
+    "Spotify Playlist URL / ID",
     value=st.session_state.playlist_url,
     placeholder="https://open.spotify.com/playlist/...",
 )
@@ -353,58 +424,67 @@ with tab1:
       conn = sqlite3.connect(DB_FILE)
       cursor = conn.cursor()
       cursor.execute("""
-                INSERT OR IGNORE INTO tracks (id, song_name, artist, uploader, uploader_display_name, added_at, score, is_saved, is_discovery)
+                INSERT OR IGNORE INTO tracks (id, song_name, artist, uploader, uploader_display_name, image_url, added_at, score, is_saved, is_discovery)
                 VALUES 
-                ('1', 'Blinding Lights', 'The Weeknd', 'friend_alice', 'Alice Smith', '2026-06-01T10:00:00Z', 0, 0, 0),
-                ('2', 'Levitating', 'Dua Lipa', 'friend_bob', 'Bob Jones', '2026-06-02T11:00:00Z', 0, 0, 0)
+                ('1', 'Blinding Lights', 'The Weeknd', 'friend_alice', 'Alice Smith', 'https://i.scdn.co/image/ab67616d0000b2738863b24b16792a9ce3e715d0', '2026-06-01T10:00:00Z', 0, 0, 0),
+                ('2', 'Levitating', 'Dua Lipa', 'friend_bob', 'Bob Jones', 'https://i.scdn.co/image/ab67616d0000b2732e8f1c84133e082161b9a957', '2026-06-02T11:00:00Z', 0, 0, 0)
             """)
       conn.commit()
       conn.close()
       st.rerun()
   else:
     for index, row in df_tracks.iterrows():
-      with st.expander(f"{row['song_name']} — {row['artist']} (Uploader: {row.get('uploader_display_name') or row.get('uploader', 'Unknown')})"):
-        col1, col2, col3 = st.columns(3)
+      uploader_name = row.get('uploader_display_name') or row.get('uploader', 'Unknown')
+      with st.expander(f"{row['song_name']} — {row['artist']} (Uploader: {uploader_name})"):
+        img_col, form_col = st.columns([1, 4])
 
-        with col1:
-          score = st.slider("Score (1-5)", 1, 5, 3, key=f"score_{row['id']}", disabled=not st.session_state.is_admin)
-        with col2:
-          is_saved = st.checkbox("Saved Song?", False, key=f"saved_{row['id']}", disabled=not st.session_state.is_admin)
-        with col3:
-          is_discovery = st.checkbox("Is a Discovery?", False, key=f"disc_{row['id']}", disabled=not st.session_state.is_admin)
+        with img_col:
+          if row.get("image_url"):
+            st.image(row["image_url"], width=130)
+          else:
+            st.caption("📷 No Cover")
 
-        if st.session_state.is_admin and st.button("Save Judgement", key=f"btn_{row['id']}"):
-          current_time = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-          conn = sqlite3.connect(DB_FILE)
-          cursor = conn.cursor()
+        with form_col:
+          col1, col2, col3 = st.columns(3)
+          with col1:
+            score = st.slider("Score (1-5)", 1, 5, 3, key=f"score_{row['id']}", disabled=not st.session_state.is_admin)
+          with col2:
+            is_saved = st.checkbox("Saved Song?", False, key=f"saved_{row['id']}", disabled=not st.session_state.is_admin)
+          with col3:
+            is_discovery = st.checkbox("Is a Discovery?", False, key=f"disc_{row['id']}", disabled=not st.session_state.is_admin)
 
-          cursor.execute(
-              """
-                    UPDATE tracks 
-                    SET score = ?, is_saved = ?, is_discovery = ?, judged_at = ?
-                    WHERE id = ?
-                """,
-              (score, int(is_saved), int(is_discovery), current_time, row["id"]),
-          )
+          if st.session_state.is_admin and st.button("Save Judgement", key=f"btn_{row['id']}"):
+            current_time = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+            conn = sqlite3.connect(DB_FILE)
+            cursor = conn.cursor()
 
-          cursor.execute(
-              """
-                    INSERT INTO judgement_log (track_id, song_name, artist, score, is_saved, is_discovery, timestamp)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                """,
-              (row["id"], row["song_name"], row["artist"], score, int(is_saved), int(is_discovery), current_time),
-          )
+            cursor.execute(
+                """
+                      UPDATE tracks 
+                      SET score = ?, is_saved = ?, is_discovery = ?, judged_at = ?
+                      WHERE id = ?
+                  """,
+                (score, int(is_saved), int(is_discovery), current_time, row["id"]),
+            )
 
-          conn.commit()
-          conn.close()
+            cursor.execute(
+                """
+                      INSERT INTO judgement_log (track_id, song_name, artist, image_url, score, is_saved, is_discovery, timestamp)
+                      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                  """,
+                (row["id"], row["song_name"], row["artist"], row.get("image_url", ""), score, int(is_saved), int(is_discovery), current_time),
+            )
 
-          st.success(f"Judgement saved for '{row['song_name']}'!")
-          st.rerun()
+            conn.commit()
+            conn.close()
 
-# --- TAB 2: JUDGEMENT HISTORY (LIVE FEED & UNDO) ---
+            st.success(f"Judgement saved for '{row['song_name']}'!")
+            st.rerun()
+
+# --- TAB 2: JUDGEMENT HISTORY (CLEAN VERTICAL FEED WITH ALBUM ART & CHECKBOXES) ---
 with tab2:
   st.header("📜 Live Judgement History Feed")
-  st.markdown("A History of Failures (and successes)")
+  st.caption("A History of Failures (and successes)")
 
   conn = sqlite3.connect(DB_FILE)
   df_history = pd.read_sql("SELECT * FROM judgement_log ORDER BY id DESC", conn)
@@ -414,19 +494,29 @@ with tab2:
     st.info("No ratings have been submitted yet.")
   else:
     for _, log in df_history.iterrows():
-      saved_status = "✅ Saved" if log["is_saved"] else "❌ Not Saved"
-      disc_status = "✨ Discovery" if log["is_discovery"] else ""
-
       with st.container(border=True):
-        col_a, col_b = st.columns([3, 1])
-        with col_a:
-          st.markdown(f"### **{log['song_name']}** — *{log['artist']}*")
-          st.markdown(f"**Score Given:** `{log['score']} / 5` | **Status:** {saved_status} {disc_status}")
-          st.markdown(f"🕒 *{log['timestamp']}*")
-        
-        with col_b:
+        col_img, col_details, col_actions = st.columns([1, 3.5, 1.2])
+
+        with col_img:
+          if log.get("image_url"):
+            st.image(log["image_url"], width=110)
+          else:
+            st.caption("📷 No Cover")
+
+        with col_details:
+          st.markdown(f"### **{log['song_name']}**")
+          st.markdown(f"**Artist:** *{log['artist']}*")
+          st.markdown(f"**Score Given:** ⭐ `{log['score']} / 5`")
+          
+          # Characteristics formatted cleanly as vertical tick boxes
+          st.checkbox("Saved Song", value=bool(log["is_saved"]), disabled=True, key=f"feed_saved_{log['id']}")
+          st.checkbox("Discovery Track", value=bool(log["is_discovery"]), disabled=True, key=f"feed_disc_{log['id']}")
+          
+          st.caption(f"🕒 Judged on {log['timestamp']}")
+
+        with col_actions:
           if st.session_state.is_admin:
-            if st.button("↩️ Undo Judgement", key=f"undo_{log['id']}"):
+            if st.button("↩️ Undo", key=f"undo_{log['id']}"):
               conn = sqlite3.connect(DB_FILE)
               cursor = conn.cursor()
               cursor.execute("""
@@ -437,7 +527,7 @@ with tab2:
               cursor.execute("DELETE FROM judgement_log WHERE id = ?", (log['id'],))
               conn.commit()
               conn.close()
-              st.success(f"Successfully reverted judgement for '{log['song_name']}'!")
+              st.success(f"Reverted '{log['song_name']}'!")
               st.rerun()
           else:
             st.caption("🔒 Admin mode required to undo")
@@ -464,12 +554,18 @@ with tab3:
             total_discoveries=("is_discovery", "sum"),
         )
         .reset_index()
-        .rename(columns={"uploader_display_name": "uploader"})
+        .rename(columns={
+            "uploader_display_name": "Uploader",
+            "total_uploads": "Total Uploads",
+            "avg_score": "Average Score",
+            "total_saves": "Total Saves",
+            "total_discoveries": "Total Discoveries"
+        })
     )
-    analytics["avg_score"] = analytics["avg_score"].round(2)
+    analytics["Average Score"] = analytics["Average Score"].round(2)
 
     st.subheader("Uploader Scorecard Summary")
-    st.dataframe(analytics, width="stretch")
+    st.dataframe(analytics, hide_index=True, width="stretch")
 
     st.subheader("Objectivity Distribution")
     df_judged = df[df["score"] > 0]
@@ -479,11 +575,22 @@ with tab3:
       base = alt.Chart(df_judged).encode(
           x=alt.X("uploader_display_name:N", title="Uploader"),
           y=alt.Y("score:Q", title="Score", scale=alt.Scale(domain=[0.5, 5.5])),
-          color="uploader_display_name:N",
+          color=alt.Color("uploader_display_name:N", legend=None),
       )
-      boxplot = base.mark_boxplot(opacity=0.6)
-      points = base.mark_circle(size=75, opacity=0.8)
-      st.altair_chart(boxplot + points, width="stretch")
+      boxplot = base.mark_boxplot(opacity=0.5, color="#8ab4f8")
+      points = base.mark_circle(size=80, opacity=0.85, color="#34a853")
+      
+      chart = (boxplot + points).properties(
+          background="transparent"
+      ).configure_axis(
+          labelColor="#e1e3e8",
+          titleColor="#8ab4f8",
+          gridColor="#2a2d37"
+      ).configure_view(
+          stroke="transparent"
+      )
+      
+      st.altair_chart(chart, use_container_width=True)
 
 # --- TAB 4: DATABASE / SPREADSHEET VIEW ---
 with tab4:
@@ -498,10 +605,9 @@ with tab4:
     if "uploader_display_name" not in df_full.columns:
       df_full["uploader_display_name"] = df_full.get("uploader", "Unknown")
 
-    if "id" in df_full.columns:
-      df_full = df_full.drop(columns=["id"])
-    if "uploader" in df_full.columns:
-      df_full = df_full.drop(columns=["uploader"])
+    # Clean up internal columns for display
+    cols_to_drop = [c for c in ["id", "uploader", "image_url"] if c in df_full.columns]
+    df_full = df_full.drop(columns=cols_to_drop)
 
     if "added_at" in df_full.columns:
       df_full["added_at"] = (
@@ -519,12 +625,11 @@ with tab4:
 
     unique_uploaders = df_full["Uploader"].unique()
     palette = [
-        "rgba(255, 99, 132, 0.15)",
-        "rgba(54, 162, 235, 0.15)",
-        "rgba(255, 206, 86, 0.15)",
-        "rgba(75, 192, 192, 0.15)",
-        "rgba(153, 102, 255, 0.15)",
-        "rgba(255, 159, 64, 0.15)",
+        "rgba(138, 180, 248, 0.12)",
+        "rgba(52, 168, 83, 0.12)",
+        "rgba(251, 188, 4, 0.12)",
+        "rgba(234, 67, 53, 0.12)",
+        "rgba(171, 71, 188, 0.12)",
     ]
     uploader_color_map = {u: palette[i % len(palette)] for i, u in enumerate(unique_uploaders)}
 
@@ -535,6 +640,7 @@ with tab4:
     styled_df = df_full.style.apply(style_rows, axis=1)
     st.dataframe(styled_df, hide_index=True, width="stretch")
 
+    st.markdown("---")
     csv_data = df_full.to_csv(index=False).encode("utf-8")
     st.download_button(
         label="📥 Download Database as Spreadsheet (CSV)",
