@@ -12,15 +12,28 @@ st.set_page_config(
     page_title="Objective Judgement Zone", page_icon="🎯", layout="wide"
 )
 
-# --- STICKY & LARGER TABS CSS (FIXED FOR VIEWPORT SCROLLING) ---
+# --- STICKY & LARGER TABS CSS (PITCH BLACK THEME) ---
 st.markdown("""
     <style>
+        /* Force entire app and background to pitch black */
+        .stApp, [data-testid="stAppViewContainer"], [data-testid="stHeader"] {
+            background-color: #000000 !important;
+            color: #ffffff !important;
+        }
+        
+        /* Force sidebar background to dark */
+        [data-testid="stSidebar"] {
+            background-color: #0c0c0c !important;
+            color: #ffffff !important;
+        }
+
         /* Allow sticky positioning to lock to the browser viewport */
         .main {
             overflow: visible !important;
         }
         .block-container {
             overflow: visible !important;
+            background-color: #000000 !important;
         }
 
         /* Make navigation tabs sticky at the top of the screen */
@@ -28,13 +41,13 @@ st.markdown("""
             position: sticky;
             top: 0px;
             z-index: 99999;
-            background-color: var(--background-color, #0e1117);
+            background-color: #000000 !important;
             padding-top: 15px;
             padding-bottom: 10px;
             margin-bottom: 20px;
         }
         .stTabs [data-baseweb="tab-list"] {
-            background-color: var(--background-color, #0e1117);
+            background-color: #000000 !important;
             border-bottom: 2px solid rgba(255, 255, 255, 0.1);
         }
         /* Make tabs larger and bolder */
@@ -43,6 +56,7 @@ st.markdown("""
             font-weight: 700;
             padding-left: 28px;
             padding-right: 28px;
+            color: #ffffff !important;
         }
     </style>
 """, unsafe_allow_html=True)
