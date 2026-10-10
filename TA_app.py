@@ -140,10 +140,12 @@ st.markdown("""
 
 DB_FILE = "spotify_tracker.db"
 
-# Initialize Database
+# Initialize Database Safely
 def init_db():
   conn = sqlite3.connect(DB_FILE)
   cursor = conn.cursor()
+  
+  # Create base tables if they don't exist
   cursor.execute("""
         CREATE TABLE IF NOT EXISTS tracks (
             id TEXT PRIMARY KEY,
@@ -160,11 +162,6 @@ def init_db():
         )
     """)
   
-  cursor.execute("PRAGMA table_info(tracks)")
-  columns = [col[1] for col in cursor.fetchall()]
-  if "image_url" not in columns:
-    cursor.execute("ALTER TABLE tracks ADD COLUMN image_url TEXT")
-
   cursor.execute("""
         CREATE TABLE IF NOT EXISTS judgement_log (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -178,10 +175,17 @@ def init_db():
             timestamp TEXT
         )
     """)
-  
+
+  # Safely check and add 'image_url' column to tracks if missing
+  cursor.execute("PRAGMA table_info(tracks)")
+  track_columns = [col[1] for col in cursor.fetchall()]
+  if "image_url" not in track_columns:
+    cursor.execute("ALTER TABLE tracks ADD COLUMN image_url TEXT")
+
+  # Safely check and add 'image_url' column to judgement_log if missing
   cursor.execute("PRAGMA table_info(judgement_log)")
-  log_cols = [col[1] for col in cursor.fetchall()]
-  if "image_url" not in log_cols:
+  log_columns = [col[1] for col in cursor.fetchall()]
+  if "image_url" not in log_columns:
     cursor.execute("ALTER TABLE judgement_log ADD COLUMN image_url TEXT")
 
   conn.commit()
