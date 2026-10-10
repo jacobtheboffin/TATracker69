@@ -16,7 +16,7 @@ SPOTIFY_CLIENT_ID = "YOUR_CLIENT_ID_HERE"
 SPOTIFY_CLIENT_SECRET = "YOUR_CLIENT_SECRET_HERE"
 EMBEDDED_PLAYLIST_ID = "7t0Gu2M5ZcwmVtidMb9RRR"
 
-# --- REFINED PREMIUM CSS THEME (Pill Tabs & Muted Inputs) ---
+# --- REFINED PREMIUM CSS THEME ---
 st.markdown("""
     <style>
         /* Overall App Background & Dark Text Setup */
@@ -52,7 +52,7 @@ st.markdown("""
             margin-bottom: 24px;
         }
 
-        /* Fully Rounded Pill Outer Track */
+        /* Tab Bar Outer Track */
         .stTabs [data-baseweb="tab-list"] {
             background-color: #14161b !important;
             border: 1px solid #2b3040 !important;
@@ -61,31 +61,34 @@ st.markdown("""
             gap: 12px !important;
         }
 
-        /* Fully Oval / Rounded Capsule Buttons */
-        .stTabs [data-baseweb="tab"] {
+        /* FORCE FULLY ROUNDED TAB BUTTONS */
+        .stTabs [data-baseweb="tab-list"] button,
+        .stTabs button[role="tab"] {
             font-size: 16px !important;
             font-weight: 700 !important;
-            padding: 14px 32px !important;
+            padding: 12px 28px !important;
             color: #cbd5e1 !important;     
             border-radius: 9999px !important;
             background-color: #1a1e28 !important; 
             border: 1px solid #333d52 !important;
             transition: all 0.25s ease-in-out !important;
             outline: none !important;
+            box-shadow: none !important;
         }
 
         /* Remove default Streamlit red underline on tabs */
-        .stTabs [data-baseweb="tab-highlight-container"] {
+        .stTabs [data-baseweb="tab-highlight-container"],
+        [data-baseweb="tab-border-bar"] {
             display: none !important;
         }
 
-        .stTabs [data-baseweb="tab"]:hover {
+        .stTabs button[role="tab"]:hover {
             color: #ffffff !important;
             background-color: #252e3f !important;
             border-color: #60a5fa !important;
         }
 
-        .stTabs [aria-selected="true"] {
+        .stTabs button[role="tab"][aria-selected="true"] {
             color: #ffffff !important;
             background-color: #2563eb !important; 
             border: 1px solid #93c5fd !important;
@@ -93,7 +96,7 @@ st.markdown("""
             box-shadow: 0 4px 18px rgba(37, 99, 235, 0.4) !important;
         }
 
-        /* Muted Dark Text Boxes (Fixes bright white inputs) */
+        /* Muted Dark Text Inputs */
         .stTextInput input {
             background-color: #1e222d !important;
             color: #ffffff !important;
@@ -104,6 +107,14 @@ st.markdown("""
         .stTextInput input:focus {
             border-color: #60a5fa !important;
             box-shadow: 0 0 0 1px #60a5fa !important;
+        }
+
+        /* Clean Card Border Styling for Feed */
+        [data-testid="stVerticalBlockBorderWrapper"] {
+            border-color: #2b3040 !important;
+            border-radius: 14px !important;
+            background-color: #12151e !important;
+            margin-bottom: 16px !important;
         }
 
         /* Global Button Styling */
@@ -225,19 +236,17 @@ def fetch_user_display_name(client_id, client_secret, user_id):
   except Exception:
     return user_id
 
-# Helper to extract cover art across all Spotify schemas
+# Helper to extract cover art across Spotify object schemas
 def extract_cover_art(track_obj):
   if not track_obj or not isinstance(track_obj, dict):
     return ""
   
-  # Scheme 1: Standard track -> album -> images
   album = track_obj.get("album")
   if isinstance(album, dict):
     images = album.get("images", [])
     if images and isinstance(images, list) and len(images) > 0:
       return images[0].get("url", "")
 
-  # Scheme 2: Direct images list
   images = track_obj.get("images", [])
   if images and isinstance(images, list) and len(images) > 0:
     return images[0].get("url", "")
@@ -410,14 +419,7 @@ if tab1 is not None:
               st.success(f"Judgement saved for '{row['song_name']}'!")
               st.rerun()
 
-# Palette used across Database and Feed for consistent Uploader Color Assignment
-PALETTE = [
-    "#3b82f6", # Blue
-    "#22c55e", # Green
-    "#eab308", # Yellow
-    "#ef4444", # Red
-    "#a855f7", # Purple
-]
+PALETTE = ["#3b82f6", "#22c55e", "#eab308", "#ef4444", "#a855f7"]
 
 # --- TAB 2: JUDGEMENT HISTORY (VERTICAL FEED) ---
 with tab2:
@@ -436,7 +438,6 @@ with tab2:
   if df_history.empty:
     st.info("No ratings have been submitted yet.")
   else:
-    # Build distinct uploader map for color matching
     unique_uploaders = list(df_history['uploader_display_name'].fillna('Unknown').unique())
     color_map = {u: PALETTE[i % len(PALETTE)] for i, u in enumerate(unique_uploaders)}
 
@@ -444,50 +445,44 @@ with tab2:
       uploader_name = log.get("uploader_display_name") or log.get("uploader") or "Unknown"
       uploader_color = color_map.get(uploader_name, "#3b82f6")
 
-      # Render Container with custom uploader border highlight
-      st.markdown(f"""
-          <div style="border: 2px solid {uploader_color}; border-radius: 12px; padding: 16px; margin-bottom: 16px; background-color: #12151e;">
-      """, unsafe_allow_html=True)
+      with st.container(border=True):
+        col_img, col_details, col_actions = st.columns([1, 3.5, 1.2])
 
-      col_img, col_details, col_actions = st.columns([1, 3.5, 1.2])
+        cover_url = log.get("image_url") or log.get("track_image_url")
 
-      cover_url = log.get("image_url") or log.get("track_image_url")
+        with col_img:
+          if cover_url and str(cover_url).strip():
+            st.image(cover_url, width=110)
+          else:
+            st.caption("📷 No Cover")
 
-      with col_img:
-        if cover_url and str(cover_url).strip():
-          st.image(cover_url, width=110)
-        else:
-          st.caption("📷 No Cover")
+        with col_details:
+          st.markdown(f"### **{log['song_name']}**")
+          st.markdown(f"**Artist:** *{log['artist']}* | **Uploader:** <span style='color:{uploader_color}; font-weight:bold;'>{uploader_name}</span>", unsafe_allow_html=True)
+          st.markdown(f"**Score Given:** <span class='feed-score'>⭐ {log['score']} / 5</span>", unsafe_allow_html=True)
+          
+          st.checkbox("Saved Song", value=bool(log["is_saved"]), disabled=True, key=f"feed_saved_{log['id']}")
+          st.checkbox("Discovery Track", value=bool(log["is_discovery"]), disabled=True, key=f"feed_disc_{log['id']}")
+          
+          st.caption(f"🕒 Judged on {log['timestamp']}")
 
-      with col_details:
-        st.markdown(f"### **{log['song_name']}**")
-        st.markdown(f"**Artist:** *{log['artist']}* | **Uploader:** <span style='color:{uploader_color}; font-weight:bold;'>{uploader_name}</span>", unsafe_allow_html=True)
-        st.markdown(f"**Score Given:** <span class='feed-score'>⭐ {log['score']} / 5</span>", unsafe_allow_html=True)
-        
-        st.checkbox("Saved Song", value=bool(log["is_saved"]), disabled=True, key=f"feed_saved_{log['id']}")
-        st.checkbox("Discovery Track", value=bool(log["is_discovery"]), disabled=True, key=f"feed_disc_{log['id']}")
-        
-        st.caption(f"🕒 Judged on {log['timestamp']}")
-
-      with col_actions:
-        if st.session_state.is_admin:
-          if st.button("↩️ Undo", key=f"undo_{log['id']}"):
-            conn = sqlite3.connect(DB_FILE)
-            cursor = conn.cursor()
-            cursor.execute("""
-                  UPDATE tracks 
-                  SET score = 0, is_saved = 0, is_discovery = 0, judged_at = NULL
-                  WHERE id = ?
-              """, (log['track_id'],))
-            cursor.execute("DELETE FROM judgement_log WHERE id = ?", (log['id'],))
-            conn.commit()
-            conn.close()
-            st.success(f"Reverted '{log['song_name']}'!")
-            st.rerun()
-        else:
-          st.caption("🔒 Admin mode required")
-
-      st.markdown("</div>", unsafe_allow_html=True)
+        with col_actions:
+          if st.session_state.is_admin:
+            if st.button("↩️ Undo", key=f"undo_{log['id']}"):
+              conn = sqlite3.connect(DB_FILE)
+              cursor = conn.cursor()
+              cursor.execute("""
+                    UPDATE tracks 
+                    SET score = 0, is_saved = 0, is_discovery = 0, judged_at = NULL
+                    WHERE id = ?
+                """, (log['track_id'],))
+              cursor.execute("DELETE FROM judgement_log WHERE id = ?", (log['id'],))
+              conn.commit()
+              conn.close()
+              st.success(f"Reverted '{log['song_name']}'!")
+              st.rerun()
+          else:
+            st.caption("🔒 Admin mode required")
 
 # --- TAB 3: LIVE ANALYTICS ---
 with tab3:
