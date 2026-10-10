@@ -12,8 +12,8 @@ st.set_page_config(
 )
 
 # HARDCODED CONFIGURATION
-SPOTIFY_CLIENT_ID = "2a48218b29a6405287ab6ba9ddf279b6"
-SPOTIFY_CLIENT_SECRET = "a44996dfd0224d419c88dc912aa759d6"
+SPOTIFY_CLIENT_ID = "YOUR_CLIENT_ID_HERE"
+SPOTIFY_CLIENT_SECRET = "YOUR_CLIENT_SECRET_HERE"
 EMBEDDED_PLAYLIST_ID = "7t0Gu2M5ZcwmVtidMb9RRR"
 
 # --- REFINED PREMIUM CSS THEME ---
@@ -94,6 +94,11 @@ st.markdown("""
             border: 1px solid #93c5fd !important;
             font-weight: 800 !important;
             box-shadow: 0 4px 18px rgba(37, 99, 235, 0.4) !important;
+        }
+
+        /* Hide Fullscreen / Zoom Button on Images */
+        button[title="View fullscreen"], [data-testid="stImage"] button {
+            display: none !important;
         }
 
         /* Muted Dark Text Inputs */
@@ -236,21 +241,29 @@ def fetch_user_display_name(client_id, client_secret, user_id):
   except Exception:
     return user_id
 
-# Helper to extract cover art across Spotify object schemas
-def extract_cover_art(track_obj):
-  if not track_obj or not isinstance(track_obj, dict):
-    return ""
-  
-  album = track_obj.get("album")
-  if isinstance(album, dict):
-    images = album.get("images", [])
+# Reliable cover art extractor with direct API track endpoint fallback
+def extract_cover_art(sp, track_info, track_id=None):
+  if track_info and isinstance(track_info, dict):
+    album = track_info.get("album")
+    if isinstance(album, dict):
+      images = album.get("images", [])
+      if images and isinstance(images, list) and len(images) > 0:
+        return images[0].get("url", "")
+
+    images = track_info.get("images", [])
     if images and isinstance(images, list) and len(images) > 0:
       return images[0].get("url", "")
-
-  images = track_obj.get("images", [])
-  if images and isinstance(images, list) and len(images) > 0:
-    return images[0].get("url", "")
     
+  if sp and track_id:
+    try:
+      full_track = sp.track(track_id)
+      album = full_track.get("album", {})
+      images = album.get("images", [])
+      if images and len(images) > 0:
+        return images[0].get("url", "")
+    except Exception:
+      pass
+
   return ""
 
 # --- AUTOMATIC SPOTIFY SYNC LOGIC ---
@@ -286,7 +299,6 @@ def sync_spotify_playlist():
       track_id = None
       song_name = "Unknown Track"
       artist = "Unknown Artist"
-      image_url = extract_cover_art(track_info)
 
       if track_info and isinstance(track_info, dict):
         track_id = track_info.get("id")
@@ -301,11 +313,12 @@ def sync_spotify_playlist():
       if not track_id:
         continue
 
+      image_url = extract_cover_art(sp, track_info, track_id)
       added_by_obj = item.get("added_by")
       added_by = added_by_obj.get("id", "unknown") if added_by_obj else "unknown"
       added_at = item.get("added_at")
 
-      cursor.execute("SELECT id FROM tracks WHERE id = ?", (track_id,))
+      cursor.execute("SELECT id, image_url FROM tracks WHERE id = ?", (track_id,))
       exists = cursor.fetchone()
 
       if not exists:
@@ -318,7 +331,7 @@ def sync_spotify_playlist():
             (track_id, song_name, artist, added_by, display_name, image_url, added_at),
         )
       else:
-        if image_url:
+        if image_url and (not exists[1] or str(exists[1]).strip() == ""):
           cursor.execute("UPDATE tracks SET image_url = ? WHERE id = ?", (image_url, track_id))
 
     conn.commit()
@@ -374,11 +387,11 @@ if tab1 is not None:
       for index, row in df_tracks.iterrows():
         uploader_name = row.get('uploader_display_name') or row.get('uploader', 'Unknown')
         with st.expander(f"{row['song_name']} — {row['artist']} (Uploader: {uploader_name})"):
-          img_col, form_col = st.columns([1, 4])
+          img_col, form_col = st.columns([1.2, 3])
 
           with img_col:
-            if row.get("image_url"):
-              st.image(row["image_url"], width=130)
+            if row.get("image_url") and str(row["image_url"]).strip():
+              st.image(row["image_url"], use_container_width=True)
             else:
               st.caption("📷 No Cover")
 
@@ -446,13 +459,13 @@ with tab2:
       uploader_color = color_map.get(uploader_name, "#3b82f6")
 
       with st.container(border=True):
-        col_img, col_details, col_actions = st.columns([1, 3.5, 1.2])
+        col_img, col_details, col_actions = st.columns([1.2, 3, 1.2])
 
         cover_url = log.get("image_url") or log.get("track_image_url")
 
         with col_img:
           if cover_url and str(cover_url).strip():
-            st.image(cover_url, width=110)
+            st.image(cover_url, use_container_width=True)
           else:
             st.caption("📷 No Cover")
 
