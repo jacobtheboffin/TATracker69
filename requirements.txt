@@ -2,3 +2,4 @@ streamlit
 pandas
 spotipy
 altair
+libsql-experimental

@@ -6,18 +6,41 @@ import spotipy
 from spotipy.oauth2 import SpotifyOAuth
 import streamlit as st
 
+# Import Turso's libSQL connector safely
+try:
+  import libsql_experimental as libsql
+except ImportError:
+  libsql = None
+
 # --- CONFIGURATION & SETUP ---
 st.set_page_config(
     page_title="Objective Judgement Zone", page_icon="🎯", layout="wide"
 )
 
-# HARDCODED CONFIGURATION
-SPOTIFY_CLIENT_ID = st.secrets.get("SPOTIFY_CLIENT_ID", "")
-SPOTIFY_CLIENT_SECRET = st.secrets.get("SPOTIFY_CLIENT_SECRET", "")
-EMBEDDED_PLAYLIST_ID = "7t0Gu2M5ZcwmVtidMb9RRR"
+# SECRETS / ENVIRONMENT CONFIGURATION (Pull from Streamlit Cloud Secrets)
+SPOTIFY_CLIENT_ID = st.secrets.get("SPOTIFY_CLIENT_ID", "YOUR_CLIENT_ID_HERE")
+SPOTIFY_CLIENT_SECRET = st.secrets.get(
+    "SPOTIFY_CLIENT_SECRET", "YOUR_CLIENT_SECRET_HERE"
+)
+EMBEDDED_PLAYLIST_ID = st.secrets.get(
+    "EMBEDDED_PLAYLIST_ID", "7t0Gu2M5ZcwmVtidMb9RRR"
+)
+
+TURSO_URL = st.secrets.get("TURSO_URL", "")
+TURSO_AUTH_TOKEN = st.secrets.get("TURSO_AUTH_TOKEN", "")
+
+
+# --- DATABASE CONNECTION (Turso Cloud with SQLite Local Fallback) ---
+def get_db_connection():
+  if TURSO_URL and TURSO_AUTH_TOKEN and libsql is not None:
+    return libsql.connect(database=TURSO_URL, auth_token=TURSO_AUTH_TOKEN)
+  else:
+    return sqlite3.connect("spotify_tracker.db")
+
 
 # --- REFINED PREMIUM CSS THEME ---
-st.markdown("""
+st.markdown(
+    """
     <style>
         /* Overall App Background & Dark Text Setup */
         .stApp, [data-testid="stAppViewContainer"], [data-testid="stHeader"] {
@@ -61,7 +84,7 @@ st.markdown("""
             gap: 12px !important;
         }
 
-        /* FORCE FULLY ROUNDED TAB BUTTONS */
+        /* FULLY ROUNDED TAB BUTTONS */
         .stTabs [data-baseweb="tab-list"] button,
         .stTabs button[role="tab"] {
             font-size: 16px !important;
@@ -96,7 +119,7 @@ st.markdown("""
             box-shadow: 0 4px 18px rgba(37, 99, 235, 0.4) !important;
         }
 
-        /* Hide Fullscreen / Zoom Button on Images */
+        /* Hide Fullscreen / Zoom Overlay on Images */
         button[title="View fullscreen"], [data-testid="stImage"] button {
             display: none !important;
         }
@@ -167,15 +190,16 @@ st.markdown("""
             font-size: 15px;
         }
     </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
-DB_FILE = "spotify_tracker.db"
 
 # Initialize Database Safely
 def init_db():
-  conn = sqlite3.connect(DB_FILE)
+  conn = get_db_connection()
   cursor = conn.cursor()
-  
+
   cursor.execute("""
         CREATE TABLE IF NOT EXISTS tracks (
             id TEXT PRIMARY KEY,
@@ -191,7 +215,7 @@ def init_db():
             judged_at TEXT
         )
     """)
-  
+
   cursor.execute("""
         CREATE TABLE IF NOT EXISTS judgement_log (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -221,7 +245,9 @@ def init_db():
   conn.commit()
   conn.close()
 
+
 init_db()
+
 
 @st.cache_data(show_spinner=False, ttl=3600)
 def fetch_user_display_name(client_id, client_secret, user_id):
@@ -241,6 +267,7 @@ def fetch_user_display_name(client_id, client_secret, user_id):
   except Exception:
     return user_id
 
+
 # Reliable cover art extractor with direct API track endpoint fallback
 def extract_cover_art(sp, track_info, track_id=None):
   if track_info and isinstance(track_info, dict):
@@ -253,7 +280,7 @@ def extract_cover_art(sp, track_info, track_id=None):
     images = track_info.get("images", [])
     if images and isinstance(images, list) and len(images) > 0:
       return images[0].get("url", "")
-    
+
   if sp and track_id:
     try:
       full_track = sp.track(track_id)
@@ -266,9 +293,14 @@ def extract_cover_art(sp, track_info, track_id=None):
 
   return ""
 
+
 # --- AUTOMATIC SPOTIFY SYNC LOGIC ---
 def sync_spotify_playlist():
-  if not SPOTIFY_CLIENT_ID or not SPOTIFY_CLIENT_SECRET or SPOTIFY_CLIENT_ID == "YOUR_CLIENT_ID_HERE":
+  if (
+      not SPOTIFY_CLIENT_ID
+      or not SPOTIFY_CLIENT_SECRET
+      or SPOTIFY_CLIENT_ID == "YOUR_CLIENT_ID_HERE"
+  ):
     return
 
   try:
@@ -286,7 +318,7 @@ def sync_spotify_playlist():
     results = sp.playlist_items(EMBEDDED_PLAYLIST_ID, market=user_market)
     items = results.get("items", [])
 
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_db_connection()
     cursor = conn.cursor()
 
     for item in items:
@@ -315,29 +347,47 @@ def sync_spotify_playlist():
 
       image_url = extract_cover_art(sp, track_info, track_id)
       added_by_obj = item.get("added_by")
-      added_by = added_by_obj.get("id", "unknown") if added_by_obj else "unknown"
+      added_by = (
+          added_by_obj.get("id", "unknown") if added_by_obj else "unknown"
+      )
       added_at = item.get("added_at")
 
-      cursor.execute("SELECT id, image_url FROM tracks WHERE id = ?", (track_id,))
+      cursor.execute(
+          "SELECT id, image_url FROM tracks WHERE id = ?", (track_id,)
+      )
       exists = cursor.fetchone()
 
       if not exists:
-        display_name = fetch_user_display_name(SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET, added_by)
+        display_name = fetch_user_display_name(
+            SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET, added_by
+        )
         cursor.execute(
             """
                 INSERT INTO tracks (id, song_name, artist, uploader, uploader_display_name, image_url, added_at, score, is_saved, is_discovery)
                 VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, 0)
             """,
-            (track_id, song_name, artist, added_by, display_name, image_url, added_at),
+            (
+                track_id,
+                song_name,
+                artist,
+                added_by,
+                display_name,
+                image_url,
+                added_at,
+            ),
         )
       else:
         if image_url and (not exists[1] or str(exists[1]).strip() == ""):
-          cursor.execute("UPDATE tracks SET image_url = ? WHERE id = ?", (image_url, track_id))
+          cursor.execute(
+              "UPDATE tracks SET image_url = ? WHERE id = ?",
+              (image_url, track_id),
+          )
 
     conn.commit()
     conn.close()
   except Exception:
     pass
+
 
 # Run automatic sync on session startup
 if "auto_synced" not in st.session_state:
@@ -373,10 +423,11 @@ else:
 if tab1 is not None:
   with tab1:
     st.header("Rate and Review Unjudged Additions")
-    
-    conn = sqlite3.connect(DB_FILE)
+
+    conn = get_db_connection()
     df_tracks = pd.read_sql(
-        "SELECT * FROM tracks WHERE score = 0 OR score IS NULL ORDER BY added_at DESC",
+        "SELECT * FROM tracks WHERE score = 0 OR score IS NULL ORDER BY"
+        " added_at DESC",
         conn,
     )
     conn.close()
@@ -385,8 +436,13 @@ if tab1 is not None:
       st.info("No unreviewed tracks left! Playlist is fully judged.")
     else:
       for index, row in df_tracks.iterrows():
-        uploader_name = row.get('uploader_display_name') or row.get('uploader', 'Unknown')
-        with st.expander(f"{row['song_name']} — {row['artist']} (Uploader: {uploader_name})"):
+        uploader_name = row.get("uploader_display_name") or row.get(
+            "uploader", "Unknown"
+        )
+        with st.expander(
+            f"{row['song_name']} — {row['artist']} (Uploader:"
+            f" {uploader_name})"
+        ):
           img_col, form_col = st.columns([1.2, 3])
 
           with img_col:
@@ -400,13 +456,19 @@ if tab1 is not None:
             with col1:
               score = st.slider("Score (1-5)", 1, 5, 3, key=f"score_{row['id']}")
             with col2:
-              is_saved = st.checkbox("Saved Song?", False, key=f"saved_{row['id']}")
+              is_saved = st.checkbox(
+                  "Saved Song?", False, key=f"saved_{row['id']}"
+              )
             with col3:
-              is_discovery = st.checkbox("Is a Discovery?", False, key=f"disc_{row['id']}")
+              is_discovery = st.checkbox(
+                  "Is a Discovery?", False, key=f"disc_{row['id']}"
+              )
 
             if st.button("Save Judgement", key=f"btn_{row['id']}"):
-              current_time = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-              conn = sqlite3.connect(DB_FILE)
+              current_time = datetime.now(timezone.utc).strftime(
+                  "%Y-%m-%d %H:%M:%S UTC"
+              )
+              conn = get_db_connection()
               cursor = conn.cursor()
 
               cursor.execute(
@@ -415,7 +477,13 @@ if tab1 is not None:
                         SET score = ?, is_saved = ?, is_discovery = ?, judged_at = ?
                         WHERE id = ?
                     """,
-                  (score, int(is_saved), int(is_discovery), current_time, row["id"]),
+                  (
+                      score,
+                      int(is_saved),
+                      int(is_discovery),
+                      current_time,
+                      row["id"],
+                  ),
               )
 
               cursor.execute(
@@ -423,7 +491,16 @@ if tab1 is not None:
                         INSERT INTO judgement_log (track_id, song_name, artist, image_url, score, is_saved, is_discovery, timestamp)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     """,
-                  (row["id"], row["song_name"], row["artist"], row.get("image_url", ""), score, int(is_saved), int(is_discovery), current_time),
+                  (
+                      row["id"],
+                      row["song_name"],
+                      row["artist"],
+                      row.get("image_url", ""),
+                      score,
+                      int(is_saved),
+                      int(is_discovery),
+                      current_time,
+                  ),
               )
 
               conn.commit()
@@ -439,23 +516,32 @@ with tab2:
   st.header("📜 Live Judgement History Feed")
   st.caption("A History of Failures (and successes)")
 
-  conn = sqlite3.connect(DB_FILE)
-  df_history = pd.read_sql("""
+  conn = get_db_connection()
+  df_history = pd.read_sql(
+      """
       SELECT j.*, t.image_url as track_image_url, t.uploader, t.uploader_display_name 
       FROM judgement_log j 
       LEFT JOIN tracks t ON j.track_id = t.id 
       ORDER BY j.id DESC
-  """, conn)
+  """,
+      conn,
+  )
   conn.close()
 
   if df_history.empty:
     st.info("No ratings have been submitted yet.")
   else:
-    unique_uploaders = list(df_history['uploader_display_name'].fillna('Unknown').unique())
-    color_map = {u: PALETTE[i % len(PALETTE)] for i, u in enumerate(unique_uploaders)}
+    unique_uploaders = list(
+        df_history["uploader_display_name"].fillna("Unknown").unique()
+    )
+    color_map = {
+        u: PALETTE[i % len(PALETTE)] for i, u in enumerate(unique_uploaders)
+    }
 
     for _, log in df_history.iterrows():
-      uploader_name = log.get("uploader_display_name") or log.get("uploader") or "Unknown"
+      uploader_name = (
+          log.get("uploader_display_name") or log.get("uploader") or "Unknown"
+      )
       uploader_color = color_map.get(uploader_name, "#3b82f6")
 
       with st.container(border=True):
@@ -471,25 +557,49 @@ with tab2:
 
         with col_details:
           st.markdown(f"### **{log['song_name']}**")
-          st.markdown(f"**Artist:** *{log['artist']}* | **Uploader:** <span style='color:{uploader_color}; font-weight:bold;'>{uploader_name}</span>", unsafe_allow_html=True)
-          st.markdown(f"**Score Given:** <span class='feed-score'>⭐ {log['score']} / 5</span>", unsafe_allow_html=True)
-          
-          st.checkbox("Saved Song", value=bool(log["is_saved"]), disabled=True, key=f"feed_saved_{log['id']}")
-          st.checkbox("Discovery Track", value=bool(log["is_discovery"]), disabled=True, key=f"feed_disc_{log['id']}")
-          
+          st.markdown(
+              f"**Artist:** *{log['artist']}* | **Uploader:** <span"
+              f" style='color:{uploader_color};"
+              f" font-weight:bold;'>{uploader_name}</span>",
+              unsafe_allow_html=True,
+          )
+          st.markdown(
+              f"**Score Given:** <span class='feed-score'>⭐ {log['score']} /"
+              " 5</span>",
+              unsafe_allow_html=True,
+          )
+
+          st.checkbox(
+              "Saved Song",
+              value=bool(log["is_saved"]),
+              disabled=True,
+              key=f"feed_saved_{log['id']}",
+          )
+          st.checkbox(
+              "Discovery Track",
+              value=bool(log["is_discovery"]),
+              disabled=True,
+              key=f"feed_disc_{log['id']}",
+          )
+
           st.caption(f"🕒 Judged on {log['timestamp']}")
 
         with col_actions:
           if st.session_state.is_admin:
             if st.button("↩️ Undo", key=f"undo_{log['id']}"):
-              conn = sqlite3.connect(DB_FILE)
+              conn = get_db_connection()
               cursor = conn.cursor()
-              cursor.execute("""
+              cursor.execute(
+                  """
                     UPDATE tracks 
                     SET score = 0, is_saved = 0, is_discovery = 0, judged_at = NULL
                     WHERE id = ?
-                """, (log['track_id'],))
-              cursor.execute("DELETE FROM judgement_log WHERE id = ?", (log['id'],))
+                """,
+                  (log["track_id"],),
+              )
+              cursor.execute(
+                  "DELETE FROM judgement_log WHERE id = ?", (log["id"],)
+              )
               conn.commit()
               conn.close()
               st.success(f"Reverted '{log['song_name']}'!")
@@ -501,17 +611,22 @@ with tab2:
 with tab3:
   st.header("Performance Review")
 
-  conn = sqlite3.connect(DB_FILE)
+  conn = get_db_connection()
   df = pd.read_sql("SELECT * FROM tracks", conn)
   conn.close()
 
   if df.empty:
     st.info("Not enough data to display analytics yet.")
   else:
-    if "uploader_display_name" not in df.columns or df["uploader_display_name"].isna().all():
+    if (
+        "uploader_display_name" not in df.columns
+        or df["uploader_display_name"].isna().all()
+    ):
       df["uploader_display_name"] = df.get("uploader", "Unknown")
     else:
-      df["uploader_display_name"] = df["uploader_display_name"].fillna(df["uploader"])
+      df["uploader_display_name"] = df["uploader_display_name"].fillna(
+          df["uploader"]
+      )
 
     analytics = (
         df.groupby("uploader_display_name")
@@ -522,13 +637,15 @@ with tab3:
             total_discoveries=("is_discovery", "sum"),
         )
         .reset_index()
-        .rename(columns={
-            "uploader_display_name": "Uploader",
-            "total_uploads": "Total Uploads",
-            "avg_score": "Average Score",
-            "total_saves": "Total Saves",
-            "total_discoveries": "Total Discoveries"
-        })
+        .rename(
+            columns={
+                "uploader_display_name": "Uploader",
+                "total_uploads": "Total Uploads",
+                "avg_score": "Average Score",
+                "total_saves": "Total Saves",
+                "total_discoveries": "Total Discoveries",
+            }
+        )
     )
     analytics["Average Score"] = analytics["Average Score"].round(2)
 
@@ -558,35 +675,41 @@ with tab3:
       )
       boxplot = base.mark_boxplot(opacity=0.5, color="#3b82f6")
       points = base.mark_circle(size=80, opacity=0.85, color="#22c55e")
-      
-      chart = (boxplot + points).properties(
-          background="transparent"
-      ).configure_axis(
-          labelColor="#ffffff",
-          titleColor="#94a3b8",
-          gridColor="#232631"
-      ).configure_view(
-          stroke="transparent"
+
+      chart = (
+          (boxplot + points)
+          .properties(background="transparent")
+          .configure_axis(
+              labelColor="#ffffff", titleColor="#94a3b8", gridColor="#232631"
+          )
+          .configure_view(stroke="transparent")
       )
-      
+
       st.altair_chart(chart, use_container_width=True)
 
 # --- TAB 4: DATABASE / SPREADSHEET VIEW ---
 with tab4:
   st.header("Database View & Spreadsheet Export")
-  conn = sqlite3.connect(DB_FILE)
+  conn = get_db_connection()
   df_full = pd.read_sql("SELECT * FROM tracks", conn)
   conn.close()
 
   if df_full.empty:
     st.info("No data in the database yet.")
   else:
-    if "uploader_display_name" not in df_full.columns or df_full["uploader_display_name"].isna().all():
+    if (
+        "uploader_display_name" not in df_full.columns
+        or df_full["uploader_display_name"].isna().all()
+    ):
       df_full["uploader_display_name"] = df_full.get("uploader", "Unknown")
     else:
-      df_full["uploader_display_name"] = df_full["uploader_display_name"].fillna(df_full["uploader"])
+      df_full["uploader_display_name"] = df_full["uploader_display_name"].fillna(
+          df_full["uploader"]
+      )
 
-    cols_to_drop = [c for c in ["id", "uploader", "image_url"] if c in df_full.columns]
+    cols_to_drop = [
+        c for c in ["id", "uploader", "image_url"] if c in df_full.columns
+    ]
     df_full = df_full.drop(columns=cols_to_drop)
 
     if "added_at" in df_full.columns:
@@ -598,8 +721,12 @@ with tab4:
       df_full = df_full.rename(columns={"added_at": "Added"})
 
     if "uploader_display_name" in df_full.columns:
-      cols = ["uploader_display_name"] + [col for col in df_full.columns if col != "uploader_display_name"]
-      df_full = df_full[cols].rename(columns={"uploader_display_name": "Uploader"})
+      cols = ["uploader_display_name"] + [
+          col for col in df_full.columns if col != "uploader_display_name"
+      ]
+      df_full = df_full[cols].rename(
+          columns={"uploader_display_name": "Uploader"}
+      )
 
     if "Uploader" not in df_full.columns:
       df_full["Uploader"] = "Unknown"
@@ -612,7 +739,10 @@ with tab4:
         "rgba(239, 68, 68, 0.15)",
         "rgba(168, 85, 247, 0.15)",
     ]
-    uploader_color_map = {u: rgba_palette[i % len(rgba_palette)] for i, u in enumerate(unique_uploaders)}
+    uploader_color_map = {
+        u: rgba_palette[i % len(rgba_palette)]
+        for i, u in enumerate(unique_uploaders)
+    }
 
     def style_rows(row):
       color = uploader_color_map.get(row["Uploader"], "")
@@ -633,42 +763,54 @@ with tab4:
 # --- TAB 5: ACCESS CONTROL & ADMIN MANAGEMENT ---
 with tab5:
   st.header("🔐 Access Control & Management")
-  
+
   if st.session_state.is_admin:
     st.success("🔓 Admin Mode Active (Full Control)")
     if st.button("🔒 Exit Admin Mode / Logout", key="tab_logout_btn"):
       st.session_state.is_admin = False
       st.rerun()
-      
+
     st.markdown("---")
     st.subheader("✏️ Manage Uploader Display Names")
-    st.caption("Change and publish custom display names for uploaders across analytics and charts.")
-    
-    conn = sqlite3.connect(DB_FILE)
-    uploaders_df = pd.read_sql("SELECT DISTINCT uploader, uploader_display_name FROM tracks", conn)
+    st.caption(
+        "Change and publish custom display names for uploaders across"
+        " analytics and charts."
+    )
+
+    conn = get_db_connection()
+    uploaders_df = pd.read_sql(
+        "SELECT DISTINCT uploader, uploader_display_name FROM tracks", conn
+    )
     conn.close()
-    
+
     for _, u_row in uploaders_df.iterrows():
-      orig_id = u_row['uploader']
-      current_name = u_row['uploader_display_name'] or orig_id
-      
+      orig_id = u_row["uploader"]
+      current_name = u_row["uploader_display_name"] or orig_id
+
       col_u1, col_u2 = st.columns([2, 1])
       with col_u1:
-        new_display = st.text_input(f"Display name for uploader ID: `{orig_id}`", value=str(current_name), key=f"rename_{orig_id}")
+        new_display = st.text_input(
+            f"Display name for uploader ID: `{orig_id}`",
+            value=str(current_name),
+            key=f"rename_{orig_id}",
+        )
       with col_u2:
         st.markdown("<br>", unsafe_allow_html=True)
         if st.button("Publish Name", key=f"pub_{orig_id}"):
-          conn = sqlite3.connect(DB_FILE)
+          conn = get_db_connection()
           cursor = conn.cursor()
-          cursor.execute("UPDATE tracks SET uploader_display_name = ? WHERE uploader = ?", (new_display, orig_id))
+          cursor.execute(
+              "UPDATE tracks SET uploader_display_name = ? WHERE uploader = ?",
+              (new_display, orig_id),
+          )
           conn.commit()
           conn.close()
           st.success(f"Updated uploader name to '{new_display}'!")
           st.rerun()
-          
+
     st.markdown("---")
     if st.button("🗑️ Reset Entire Database", key="reset_db_btn"):
-      conn = sqlite3.connect(DB_FILE)
+      conn = get_db_connection()
       cursor = conn.cursor()
       cursor.execute("DROP TABLE IF EXISTS tracks")
       cursor.execute("DROP TABLE IF EXISTS judgement_log")
@@ -679,7 +821,11 @@ with tab5:
       st.rerun()
   else:
     st.info("👁️ You are currently browsing in **Viewer Mode** (Read-Only).")
-    admin_pass = st.text_input("Enter Admin Password to Unlock Management", type="password", key="main_admin_pass")
+    admin_pass = st.text_input(
+        "Enter Admin Password to Unlock Management",
+        type="password",
+        key="main_admin_pass",
+    )
     if admin_pass == "admin123":
       st.session_state.is_admin = True
       st.success("Access granted!")
