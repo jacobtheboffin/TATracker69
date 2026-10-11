@@ -1,16 +1,11 @@
 from datetime import datetime, timezone
 import altair as alt
+import requests
 import sqlite3
 import pandas as pd
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
 import streamlit as st
-
-# Import Turso's libSQL connector safely
-try:
-  import libsql_experimental as libsql
-except ImportError:
-  libsql = None
 
 # --- CONFIGURATION & SETUP ---
 st.set_page_config(
@@ -30,10 +25,96 @@ TURSO_URL = st.secrets.get("TURSO_URL", "")
 TURSO_AUTH_TOKEN = st.secrets.get("TURSO_AUTH_TOKEN", "")
 
 
-# --- DATABASE CONNECTION (Turso Cloud with SQLite Local Fallback) ---
+# --- TURSO HTTP API ADAPTER (Zero Compilation / Cloud Persistence) ---
+class TursoCursor:
+
+  def __init__(self, url, token):
+    self.url = url.rstrip("/")
+    self.token = token
+    self.headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+    }
+    self.lastrowid = None
+    self._fetchall_data = []
+
+  def execute(self, query, params=()):
+    if isinstance(params, tuple):
+      params_list = list(params)
+    elif isinstance(params, list):
+      params_list = params
+    else:
+      params_list = [params] if params else []
+
+    args = []
+    for p in params_list:
+      if p is None:
+        args.append({"type": "null"})
+      elif isinstance(p, (int, float)):
+        args.append({"type": "float" if isinstance(p, float) else "integer", "value": str(p)})
+      else:
+        args.append({"type": "text", "value": str(p)})
+
+    payload = {"statements": [{"sql": query, "args": args}]}
+
+    try:
+      resp = requests.post(
+          f"{self.url}/v2/pipeline", json=payload, headers=self.headers, timeout=10
+      )
+      if resp.status_code == 200:
+        data = resp.json()
+        results = data.get("results", [{}])[0]
+        if "response" in results:
+          res_body = results["response"]
+          rows = []
+          for row in res_body.get("rows", []):
+            row_vals = [
+                cell.get("value") if isinstance(cell, dict) else cell
+                for cell in row
+            ]
+            rows.append(row_vals)
+          self._fetchall_data = rows
+          self.lastrowid = res_body.get("last_insert_rowid")
+        else:
+          self._fetchall_data = []
+      else:
+        self._fetchall_data = []
+    except Exception:
+      self._fetchall_data = []
+
+  def fetchone(self):
+    if self._fetchall_data:
+      return self._fetchall_data.pop(0)
+    return None
+
+  def fetchall(self):
+    data = self._fetchall_data
+    self._fetchall_data = []
+    return data
+
+  def close(self):
+    pass
+
+
+class TursoConnection:
+
+  def __init__(self, url, token):
+    self.url = url
+    self.token = token
+
+  def cursor(self):
+    return TursoCursor(self.url, self.token)
+
+  def commit(self):
+    pass
+
+  def close(self):
+    pass
+
+
 def get_db_connection():
-  if TURSO_URL and TURSO_AUTH_TOKEN and libsql is not None:
-    return libsql.connect(database=TURSO_URL, auth_token=TURSO_AUTH_TOKEN)
+  if TURSO_URL and TURSO_AUTH_TOKEN:
+    return TursoConnection(TURSO_URL, TURSO_AUTH_TOKEN)
   else:
     return sqlite3.connect("spotify_tracker.db")
 
@@ -229,18 +310,6 @@ def init_db():
             timestamp TEXT
         )
     """)
-
-  cursor.execute("PRAGMA table_info(tracks)")
-  track_columns = [col[1] for col in cursor.fetchall()]
-  if "uploader_display_name" not in track_columns:
-    cursor.execute("ALTER TABLE tracks ADD COLUMN uploader_display_name TEXT")
-  if "image_url" not in track_columns:
-    cursor.execute("ALTER TABLE tracks ADD COLUMN image_url TEXT")
-
-  cursor.execute("PRAGMA table_info(judgement_log)")
-  log_columns = [col[1] for col in cursor.fetchall()]
-  if "image_url" not in log_columns:
-    cursor.execute("ALTER TABLE judgement_log ADD COLUMN image_url TEXT")
 
   conn.commit()
   conn.close()
