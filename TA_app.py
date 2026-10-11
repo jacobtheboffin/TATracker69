@@ -504,7 +504,7 @@ with tab2:
 
       with st.container(border=True):
         # Adjusted column widths to keep album art compact and scaled to text height block
-        c1, c2 = st.columns([0.8, 4], gap="small")
+        c1, c2 = st.columns([0.7, 4], gap="small")
         with c1:
           if log.get("image_url") or log.get("track_image_url"):
             st.image(
