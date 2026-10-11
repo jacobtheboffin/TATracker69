@@ -192,33 +192,33 @@ def init_db():
   conn = get_db_connection()
   cursor = conn.cursor()
   cursor.execute("""
-        CREATE TABLE IF NOT EXISTS tracks (
-            id TEXT PRIMARY KEY,
-            song_name TEXT,
-            artist TEXT,
-            uploader TEXT,
-            uploader_display_name TEXT,
-            image_url TEXT,
-            added_at TEXT,
-            score INTEGER DEFAULT 0,
-            is_saved INTEGER DEFAULT 0,
-            is_discovery INTEGER DEFAULT 0,
-            judged_at TEXT
-        )
-    """)
+      CREATE TABLE IF NOT EXISTS tracks (
+          id TEXT PRIMARY KEY,
+          song_name TEXT,
+          artist TEXT,
+          uploader TEXT,
+          uploader_display_name TEXT,
+          image_url TEXT,
+          added_at TEXT,
+          score INTEGER DEFAULT 0,
+          is_saved INTEGER DEFAULT 0,
+          is_discovery INTEGER DEFAULT 0,
+          judged_at TEXT
+      )
+  """)
   cursor.execute("""
-        CREATE TABLE IF NOT EXISTS judgement_log (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            track_id TEXT,
-            song_name TEXT,
-            artist TEXT,
-            image_url TEXT,
-            score INTEGER,
-            is_saved INTEGER,
-            is_discovery INTEGER,
-            timestamp TEXT
-        )
-    """)
+      CREATE TABLE IF NOT EXISTS judgement_log (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          track_id TEXT,
+          song_name TEXT,
+          artist TEXT,
+          image_url TEXT,
+          score INTEGER,
+          is_saved INTEGER,
+          is_discovery INTEGER,
+          timestamp TEXT
+      )
+  """)
   conn.commit()
   conn.close()
 
