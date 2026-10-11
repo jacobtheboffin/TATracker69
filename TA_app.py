@@ -25,7 +25,7 @@ TURSO_URL = st.secrets.get("TURSO_URL", "")
 TURSO_AUTH_TOKEN = st.secrets.get("TURSO_AUTH_TOKEN", "")
 
 
-# --- TURSO HTTP API ADAPTER (Zero Compilation / Cloud Persistence) ---
+# --- TURSO HTTP API ADAPTER (Full Pandas & SQLite Compatibility) ---
 class TursoCursor:
 
   def __init__(self, url, token):
@@ -36,6 +36,7 @@ class TursoCursor:
         "Content-Type": "application/json",
     }
     self.lastrowid = None
+    self.description = None
     self._fetchall_data = []
 
   def execute(self, query, params=()):
@@ -51,7 +52,10 @@ class TursoCursor:
       if p is None:
         args.append({"type": "null"})
       elif isinstance(p, (int, float)):
-        args.append({"type": "float" if isinstance(p, float) else "integer", "value": str(p)})
+        args.append({
+            "type": "float" if isinstance(p, float) else "integer",
+            "value": str(p),
+        })
       else:
         args.append({"type": "text", "value": str(p)})
 
@@ -66,6 +70,13 @@ class TursoCursor:
         results = data.get("results", [{}])[0]
         if "response" in results:
           res_body = results["response"]
+          cols = res_body.get("cols", [])
+          # Populate description for pandas.read_sql compatibility (tuples of column name, type, etc.)
+          self.description = [
+              (col.get("name"), None, None, None, None, None, None)
+              for col in cols
+          ]
+
           rows = []
           for row in res_body.get("rows", []):
             row_vals = [
@@ -76,10 +87,13 @@ class TursoCursor:
           self._fetchall_data = rows
           self.lastrowid = res_body.get("last_insert_rowid")
         else:
+          self.description = []
           self._fetchall_data = []
       else:
+        self.description = []
         self._fetchall_data = []
     except Exception:
+      self.description = []
       self._fetchall_data = []
 
   def fetchone(self):
