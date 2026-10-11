@@ -1,7 +1,6 @@
 from datetime import datetime, timezone
 import json
 import os
-import altair as alt
 import requests
 import sqlite3
 import pandas as pd
@@ -37,7 +36,7 @@ if "SPOTIFY_CACHE_JSON" in st.secrets:
     st.error(f"⚠️ Cache JSON error: {e}")
 
 
-# --- TURSO HTTP API ADAPTER ---
+# --- HARDENED TURSO HTTP API ADAPTER ---
 class TursoCursor:
 
   def __init__(self, url, token):
@@ -94,11 +93,18 @@ class TursoCursor:
         results = data.get("results", [])
         if results and "response" in results[0]:
           res_body = results[0]["response"]
+          
+          # Check for execution errors returned by Turso pipeline
+          if "error" in res_body:
+            print(f"Turso SQL Error: {res_body['error']}")
+            return
+
           cols = res_body.get("cols", [])
-          self.description = [
-              (col.get("name"), None, None, None, None, None, None)
-              for col in cols
-          ]
+          if cols:
+            self.description = [
+                (col.get("name"), None, None, None, None, None, None)
+                for col in cols
+            ]
 
           rows = []
           for row in res_body.get("rows", []):
@@ -109,8 +115,10 @@ class TursoCursor:
             rows.append(row_vals)
           self._fetchall_data = rows
           self.lastrowid = res_body.get("last_insert_rowid")
-    except Exception:
-      pass
+      else:
+        print(f"Turso HTTP Error {resp.status_code}: {resp.text}")
+    except Exception as e:
+      print(f"Turso Request Exception: {e}")
 
   def fetchone(self):
     if self._fetchall_data:
