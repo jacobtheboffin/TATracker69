@@ -610,7 +610,7 @@ with tab3:
           x="uploader_display_name",
           y="Average_Score",
           error_y="Std_Dev",
-          title="Average Score (Mean ± Standard Deviation) by Uploader",
+          title="Performance Review",
           labels={"uploader_display_name": "Uploader", "Average_Score": "Average Score"},
           color="uploader_display_name",
           color_discrete_map=color_map
