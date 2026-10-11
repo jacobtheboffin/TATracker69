@@ -772,13 +772,16 @@ with tab3:
 
 # --- TAB 4: DATABASE / SPREADSHEET VIEW ---
 with tab4:
-  st.header("Database View & Spreadsheet Export")
+  header_col1, header_col2 = st.columns([3, 1])
+  with header_col1:
+    st.header("Database View & Spreadsheet Export")
+
   conn = get_db_connection()
   df_full = pd.read_sql("SELECT * FROM tracks", conn)
   conn.close()
 
-  if df_full.empty:
-    st.info("No data in the database yet.")
+  if df_full is None or df_full.empty:
+    st.info("No data in the database yet. (Or table is still syncing)")
   else:
     if (
         "uploader_display_name" not in df_full.columns
