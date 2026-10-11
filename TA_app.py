@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import json
 import os
 import altair as alt
 import requests
@@ -25,12 +26,17 @@ EMBEDDED_PLAYLIST_ID = st.secrets.get(
 TURSO_URL = st.secrets.get("TURSO_URL", "")
 TURSO_AUTH_TOKEN = st.secrets.get("TURSO_AUTH_TOKEN", "")
 
-# --- WRITE INJECTED SPOTIFY CACHE TO /TMP ON STREAMLIT CLOUD ---
-if "SPOTIFY_CACHE_JSON" in st.secrets:
-  with open("/tmp/.cache", "w") as f:
-    f.write(st.secrets["SPOTIFY_CACHE_JSON"])
+# --- SAFE INJECTED SPOTIFY CACHE LOADER ---
+SPOTIFY_CACHE_PATH = "/tmp/.cache"
 
-SPOTIFY_CACHE_PATH = "/tmp/.cache" if os.path.exists("/tmp") else ".cache"
+if "SPOTIFY_CACHE_JSON" in st.secrets:
+  try:
+    raw_json = st.secrets["SPOTIFY_CACHE_JSON"]
+    parsed = json.loads(raw_json)
+    with open(SPOTIFY_CACHE_PATH, "w") as f:
+      json.dump(parsed, f)
+  except Exception as e:
+    st.error(f"⚠️ SPOTIFY_CACHE_JSON secret is invalid or malformed JSON: {e}")
 
 
 # --- TURSO HTTP API ADAPTER (Correct Hrana Pipeline Format) ---
@@ -324,6 +330,7 @@ def fetch_user_display_name(client_id, client_secret, user_id):
         redirect_uri="http://127.0.0.1:8888/callback",
         scope="playlist-read-private",
         cache_path=SPOTIFY_CACHE_PATH,
+        open_browser=False,
     )
     sp = spotipy.Spotify(auth_manager=auth_manager)
     user_info = sp.user(user_id)
