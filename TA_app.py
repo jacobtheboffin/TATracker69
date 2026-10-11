@@ -348,7 +348,7 @@ if "is_admin" not in st.session_state:
 
 if st.session_state.is_admin:
   tab1, tab2, tab3, tab4, tab5 = st.tabs([
-      "🎯 Judge & Rejudge",
+      "🎯 Judge",
       "📜 Judgement History",
       "📊 Live Analytics",
       "📁 Database / Spreadsheet",
@@ -363,10 +363,10 @@ else:
       "🔐 Access Control",
   ])
 
-# --- TAB 1: JUDGE & REJUDGE UNJUDGED TRACKS ---
+# --- TAB 1: JUDGE UNJUDGED TRACKS ---
 if tab1 is not None:
   with tab1:
-    st.header("Rate & Judge New Tracks")
+    st.header("Judge New Tracks")
     st.caption(
         "Listing only unjudged tracks (score of 0), excluding uploader"
         " 11181482458."
@@ -473,7 +473,7 @@ if tab1 is not None:
 
 # --- TAB 2: HISTORY ---
 with tab2:
-  st.header("📜 Live Judgement History Feed")
+  st.header("📜 Live Judgement History")
   conn = get_db_connection()
   df_history = load_df_from_query(
       """
@@ -513,7 +513,7 @@ with tab2:
         with c2:
           # Uploader name exactly above the song name
           st.markdown(
-              f"<div style='color: {color_code}; font-weight: bold; font-size: 14px; margin-bottom: 2px;'>● {uploader_name}</div>",
+              f"<div style='color: {color_code}; font-weight: bold; font-size: 24px; margin-bottom: 2px;'>● {uploader_name}</div>",
               unsafe_allow_html=True,
           )
           st.markdown(f"### **{log['song_name']}**")
@@ -521,6 +521,7 @@ with tab2:
               f"**Artist:** *{log['artist']}* | **Score:** ⭐ {log['score']}/5"
           )
           st.markdown(f"{saved_html} &nbsp;&nbsp; {disc_html}", unsafe_allow_html=True)
+
           st.caption(f"🕒 Judged on {log['timestamp']}")
           
           if st.session_state.is_admin:
@@ -563,7 +564,7 @@ with tab3:
     )
 
     st.markdown("---")
-    st.subheader("Uploader Performance Statistics (Excluding 11181482458)")
+    st.subheader("Uploader Performance")
     
     df_analytics = df_judged[df_judged["uploader"] != "11181482458"]
     
@@ -579,7 +580,7 @@ with tab3:
       color_map = {row["uploader_display_name"]: get_uploader_color(row["uploader"]) for _, row in df_analytics.iterrows()}
 
       # Bar chart representing mean with standard deviation (plus/minus error bars)
-      fig = px.bar(
+      fig = px.scatter(
           stats,
           x="uploader_display_name",
           y="Average_Score",
