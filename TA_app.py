@@ -355,7 +355,7 @@ if tab1 is not None:
           img_col, form_col = st.columns([1.2, 3])
           with img_col:
             if row.get("image_url"):
-              st.image(row["image_url"], use_container_width=True)
+              st.image(row["image_url"], width="stretch")
             else:
               st.caption("No Cover")
           with form_col:
@@ -452,7 +452,7 @@ with tab2:
           if log.get("image_url") or log.get("track_image_url"):
             st.image(
                 log.get("image_url") or log.get("track_image_url"),
-                use_container_width=True,
+                width="stretch",
             )
         with c2:
           st.markdown(f"### **{log['song_name']}**")
@@ -490,7 +490,7 @@ with tab3:
     st.info("Not enough judged data for analytics yet.")
   else:
     df_judged = df[df["score"] > 0]
-    st.dataframe(df_judged[["song_name", "artist", "score"]], use_container_width=True)
+    st.dataframe(df_judged[["song_name", "artist", "score"]], width="stretch")
 
 # --- TAB 4: DATABASE ---
 with tab4:
@@ -501,7 +501,7 @@ with tab4:
   if df_full.empty:
     st.info("Database is currently empty.")
   else:
-    st.dataframe(df_full, use_container_width=True)
+    st.dataframe(df_full, width="stretch")
     st.download_button(
         "Download CSV",
         df_full.to_csv(index=False).encode("utf-8"),
