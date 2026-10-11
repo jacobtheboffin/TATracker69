@@ -5,7 +5,7 @@ import requests
 import sqlite3
 import pandas as pd
 import spotipy
-from spotipy.oauth2 import SpotifyOAuth
+from spotipy.oauth2 import SpotifyClientCredentials
 import streamlit as st
 
 # --- CONFIGURATION & SETUP ---
@@ -24,9 +24,6 @@ EMBEDDED_PLAYLIST_ID = st.secrets.get(
 
 TURSO_URL = st.secrets.get("TURSO_URL", "")
 TURSO_AUTH_TOKEN = st.secrets.get("TURSO_AUTH_TOKEN", "")
-
-# Writable cache path for Streamlit Cloud filesystem constraints
-SPOTIFY_CACHE_PATH = "/tmp/.cache" if os.path.exists("/tmp") else ".cache"
 
 
 # --- TURSO HTTP API ADAPTER (Correct Hrana Pipeline Format) ---
@@ -336,19 +333,7 @@ init_db()
 def fetch_user_display_name(client_id, client_secret, user_id):
   if not user_id or user_id == "unknown":
     return "Unknown"
-  try:
-    auth_manager = SpotifyOAuth(
-        client_id=client_id.strip(),
-        client_secret=client_secret.strip(),
-        redirect_uri="http://127.0.0.1:8888/callback",
-        scope="playlist-read-private",
-        cache_path=SPOTIFY_CACHE_PATH,
-    )
-    sp = spotipy.Spotify(auth_manager=auth_manager)
-    user_info = sp.user(user_id)
-    return user_info.get("display_name") or user_id
-  except Exception:
-    return user_id
+  return user_id
 
 
 def extract_cover_art(sp, track_info, track_id=None):
@@ -376,7 +361,7 @@ def extract_cover_art(sp, track_info, track_id=None):
   return ""
 
 
-# --- AUTOMATIC SPOTIFY SYNC LOGIC ---
+# --- AUTOMATIC SPOTIFY SYNC LOGIC (Headless Client Credentials) ---
 def sync_spotify_playlist():
   if (
       not SPOTIFY_CLIENT_ID
@@ -386,13 +371,9 @@ def sync_spotify_playlist():
     return
 
   try:
-    auth_manager = SpotifyOAuth(
+    auth_manager = SpotifyClientCredentials(
         client_id=SPOTIFY_CLIENT_ID.strip(),
         client_secret=SPOTIFY_CLIENT_SECRET.strip(),
-        redirect_uri="http://127.0.0.1:8888/callback",
-        scope="playlist-read-private playlist-read-collaborative",
-        open_browser=False,
-        cache_path=SPOTIFY_CACHE_PATH,
     )
     sp = spotipy.Spotify(auth_manager=auth_manager)
     user_market = "GB"
@@ -527,7 +508,7 @@ if tab1 is not None:
 
           with img_col:
             if row.get("image_url") and str(row["image_url"]).strip():
-              st.image(row["image_url"], use_container_width=True)
+              st.image(row["image_url"], width="stretch")
             else:
               st.caption("📷 No Cover")
 
@@ -631,7 +612,7 @@ with tab2:
 
         with col_img:
           if cover_url and str(cover_url).strip():
-            st.image(cover_url, use_container_width=True)
+            st.image(cover_url, width="stretch")
           else:
             st.caption("📷 No Cover")
 
@@ -765,7 +746,7 @@ with tab3:
           .configure_view(stroke="transparent")
       )
 
-      st.altair_chart(chart, use_container_width=True)
+      st.altair_chart(chart, width="stretch")
 
 # --- TAB 4: DATABASE / SPREADSHEET VIEW ---
 with tab4:
