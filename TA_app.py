@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import os
 import altair as alt
 import requests
 import sqlite3
@@ -24,8 +25,11 @@ EMBEDDED_PLAYLIST_ID = st.secrets.get(
 TURSO_URL = st.secrets.get("TURSO_URL", "")
 TURSO_AUTH_TOKEN = st.secrets.get("TURSO_AUTH_TOKEN", "")
 
+# Writable cache path for Streamlit Cloud filesystem constraints
+SPOTIFY_CACHE_PATH = "/tmp/.cache" if os.path.exists("/tmp") else ".cache"
 
-# --- CORRECTED TURSO HTTP API ADAPTER & CONNECTION ---
+
+# --- TURSO HTTP API ADAPTER (Correct Hrana Pipeline Format) ---
 class TursoCursor:
 
   def __init__(self, url, token):
@@ -198,7 +202,6 @@ st.markdown(
             box-shadow: none !important;
         }
 
-        /* Remove default Streamlit red underline on tabs */
         .stTabs [data-baseweb="tab-highlight-container"],
         [data-baseweb="tab-border-bar"] {
             display: none !important;
@@ -218,12 +221,10 @@ st.markdown(
             box-shadow: 0 4px 18px rgba(37, 99, 235, 0.4) !important;
         }
 
-        /* Hide Fullscreen / Zoom Overlay on Images */
         button[title="View fullscreen"], [data-testid="stImage"] button {
             display: none !important;
         }
 
-        /* Muted Dark Text Inputs */
         .stTextInput input {
             background-color: #1e222d !important;
             color: #ffffff !important;
@@ -236,7 +237,6 @@ st.markdown(
             box-shadow: 0 0 0 1px #60a5fa !important;
         }
 
-        /* Clean Card Border Styling for Feed */
         [data-testid="stVerticalBlockBorderWrapper"] {
             border-color: #2b3040 !important;
             border-radius: 14px !important;
@@ -244,7 +244,6 @@ st.markdown(
             margin-bottom: 16px !important;
         }
 
-        /* Global Button Styling */
         .stButton button, button {
             background-color: #1e2530 !important;
             color: #ffffff !important;
@@ -260,7 +259,6 @@ st.markdown(
             color: #ffffff !important;
         }
 
-        /* Specific Undo Button Styling */
         button[key*="undo_"] {
             background-color: #2b1f1f !important;
             color: #fca5a5 !important;
@@ -271,7 +269,6 @@ st.markdown(
             color: #ffffff !important;
         }
 
-        /* CSV Download Button Styling */
         .stDownloadButton button {
             background-color: #166534 !important;
             color: #ffffff !important;
@@ -282,7 +279,6 @@ st.markdown(
             border-color: #4ade80 !important;
         }
 
-        /* Soft Feed Score Styling */
         .feed-score {
             color: #cbd5e1 !important;
             font-weight: 600;
@@ -346,7 +342,7 @@ def fetch_user_display_name(client_id, client_secret, user_id):
         client_secret=client_secret.strip(),
         redirect_uri="http://127.0.0.1:8888/callback",
         scope="playlist-read-private",
-        cache_path=".cache",
+        cache_path=SPOTIFY_CACHE_PATH,
     )
     sp = spotipy.Spotify(auth_manager=auth_manager)
     user_info = sp.user(user_id)
@@ -355,7 +351,6 @@ def fetch_user_display_name(client_id, client_secret, user_id):
     return user_id
 
 
-# Reliable cover art extractor with direct API track endpoint fallback
 def extract_cover_art(sp, track_info, track_id=None):
   if track_info and isinstance(track_info, dict):
     album = track_info.get("album")
@@ -397,7 +392,7 @@ def sync_spotify_playlist():
         redirect_uri="http://127.0.0.1:8888/callback",
         scope="playlist-read-private playlist-read-collaborative",
         open_browser=False,
-        cache_path=".cache",
+        cache_path=SPOTIFY_CACHE_PATH,
     )
     sp = spotipy.Spotify(auth_manager=auth_manager)
     user_market = "GB"
@@ -472,8 +467,8 @@ def sync_spotify_playlist():
 
     conn.commit()
     conn.close()
-  except Exception:
-    pass
+  except Exception as e:
+    st.error(f"❌ Spotify Sync Error: {e}")
 
 
 # Run automatic sync on session startup
@@ -484,11 +479,9 @@ if "auto_synced" not in st.session_state:
 # --- STREAMLIT UI ---
 st.title("🎯 Objective Judgement Zone")
 
-# Initialize Session State
 if "is_admin" not in st.session_state:
   st.session_state.is_admin = False
 
-# Navigation Tabs
 if st.session_state.is_admin:
   tab1, tab2, tab3, tab4, tab5 = st.tabs([
       "🎯 Judge New Tracks",
@@ -776,10 +769,7 @@ with tab3:
 
 # --- TAB 4: DATABASE / SPREADSHEET VIEW ---
 with tab4:
-  header_col1, header_col2 = st.columns([3, 1])
-  with header_col1:
-    st.header("Database View & Spreadsheet Export")
-
+  st.header("Database View & Spreadsheet Export")
   conn = get_db_connection()
   df_full = pd.read_sql("SELECT * FROM tracks", conn)
   conn.close()
