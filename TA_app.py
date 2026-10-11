@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 import json
 import os
 import plotly.express as px
+import plotly.graph_objects as go
 import requests
 import sqlite3
 import pandas as pd
@@ -372,7 +373,6 @@ if tab1 is not None:
     )
 
     conn = get_db_connection()
-    # Judge tab must only include songs that have not been judged before (score of 0 or NULL), excluding uploader 11181482458
     df_tracks = load_df_from_query(
         """
         SELECT * FROM tracks 
@@ -496,15 +496,21 @@ with tab2:
       uploader_name = log.get("uploader_display_name") or log.get("uploader", "Unknown")
       color_code = get_uploader_color(log.get("uploader"))
       
-      saved_checked = bool(log["is_saved"])
-      disc_checked = bool(log["is_discovery"])
+      saved_checked = bool(int(log["is_saved"])) if pd.notnull(log["is_saved"]) else False
+      disc_checked = bool(int(log["is_discovery"])) if pd.notnull(log["is_discovery"]) else False
+
+      # Green if correct/true, red if false with no tick in box
+      saved_html = f"<div style='display:inline-block; padding: 4px 10px; border-radius: 6px; background-color: {'#22c55e22' if saved_checked else '#ef444422'}; color: {'#22c55e' if saved_checked else '#ef4444'}; border: 1px solid {'#22c55e' if saved_checked else '#ef4444'}; font-weight: bold;'>{'☑' if saved_checked else '☐'} Saved</div>"
+      disc_html = f"<div style='display:inline-block; padding: 4px 10px; border-radius: 6px; background-color: {'#22c55e22' if disc_checked else '#ef444422'}; color: {'#22c55e' if disc_checked else '#ef4444'}; border: 1px solid {'#22c55e' if disc_checked else '#ef4444'}; font-weight: bold;'>{'☑' if disc_checked else '☐'} Discovery</div>"
 
       with st.container(border=True):
+        # Uploader name exactly above the song name
         st.markdown(
-            f"<span style='color: {color_code}; font-weight: bold;'>●"
-            f" Uploader: {uploader_name}</span>",
+            f"<div style='color: {color_code}; font-weight: bold; font-size: 14px; margin-bottom: 4px;'>● {uploader_name}</div>",
             unsafe_allow_html=True,
         )
+        st.markdown(f"### **{log['song_name']}**")
+        
         c1, c2, c3 = st.columns([1.2, 3, 1.2])
         with c1:
           if log.get("image_url") or log.get("track_image_url"):
@@ -513,18 +519,10 @@ with tab2:
                 width="stretch",
             )
         with c2:
-          st.markdown(f"### **{log['song_name']}**")
           st.markdown(
               f"**Artist:** *{log['artist']}* | **Score:** ⭐ {log['score']}/5"
           )
-          
-          # Tick box list for saved and discovery status
-          sc1, sc2 = st.columns(2)
-          with sc1:
-            st.checkbox("Saved Song", value=saved_checked, disabled=True, key=f"hist_saved_{log['id']}")
-          with sc2:
-            st.checkbox("Discovery", value=disc_checked, disabled=True, key=f"hist_disc_{log['id']}")
-
+          st.markdown(f"{saved_html} &nbsp;&nbsp; {disc_html}", unsafe_allow_html=True)
           st.caption(f"🕒 Judged on {log['timestamp']}")
         with c3:
           if st.session_state.is_admin:
@@ -560,7 +558,7 @@ with tab3:
     df_judged["score"] = df_judged["score"].astype(int)
     
     st.subheader("Most Recent 10 Scores")
-    # Live analytics table showing only the most recent 10 scores with scroll function
+    # Live analytics table showing only the most recent 10 scores with a scroll function
     st.dataframe(
         df_judged[["song_name", "artist", "score", "uploader_display_name"]].head(10),
         height=300,
@@ -576,26 +574,52 @@ with tab3:
     if df_analytics.empty:
       st.info("No analytics data available for valid uploaders.")
     else:
-      stats = df_analytics.groupby("uploader_display_name").agg(
-          Average_Score=("score", "mean"),
-          Std_Dev=("score", "std")
-      ).reset_index()
-      stats["Std_Dev"] = stats["Std_Dev"].fillna(0)
+      # Build advanced plot showing individual data points with distinct mean and standard deviation lines
+      fig = go.Figure()
+      
+      for uploader, group in df_analytics.groupby("uploader_display_name"):
+        uploader_id = group["uploader"].iloc[0] if "uploader" in group.columns else None
+        color = get_uploader_color(uploader_id)
+        
+        mean_val = group["score"].mean()
+        std_val = group["score"].std() if len(group) > 1 else 0.0
 
-      # Create distinct color mapping for uploaders
-      color_map = {row["uploader_display_name"]: get_uploader_color(row["uploader"]) for _, row in df_analytics.iterrows()}
+        # Individual scatter data points
+        fig.add_trace(go.Scatter(
+            x=[uploader] * len(group),
+            y=group["score"],
+            mode="markers",
+            name=f"{uploader} Scores",
+            marker=dict(size=11, color=color, opacity=0.85),
+            showlegend=False
+        ))
+        
+        # Mean horizontal line indicator per uploader
+        fig.add_shape(
+            type="line",
+            x0=uploader, x1=uploader,
+            y0=mean_val, y1=mean_val,
+            line=dict(color="white", width=4, dash="solid"),
+        )
+        
+        # Standard Deviation range markers / lines
+        if std_val > 0:
+          fig.add_shape(
+              type="line",
+              x0=uploader, x1=uploader,
+              y0=max(1, mean_val - std_val), y1=min(5, mean_val + std_val),
+              line=dict(color="#facc15", width=2, dash="dash"),
+          )
 
-      fig = px.bar(
-          stats,
-          x="uploader_display_name",
-          y="Average_Score",
-          error_y="Std_Dev",
-          title="Average Score and Standard Deviation by Uploader",
-          labels={"uploader_display_name": "Uploader", "Average_Score": "Average Score"},
-          color="uploader_display_name",
-          color_discrete_map=color_map
+      fig.update_layout(
+          title="Individual Scores with Mean (White Line) & Standard Deviation (Yellow Dashed Range)",
+          xaxis_title="Uploader",
+          yaxis_title="Score",
+          paper_bgcolor="#0d0e12",
+          plot_bgcolor="#0d0e12",
+          font_color="#ffffff",
+          yaxis=dict(range=[0.5, 5.5], dtick=1)
       )
-      fig.update_layout(paper_bgcolor="#0d0e12", plot_bgcolor="#0d0e12", font_color="#ffffff")
       st.plotly_chart(fig, width="stretch")
 
 # --- TAB 4: DATABASE ---
