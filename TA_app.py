@@ -95,13 +95,20 @@ class TursoCursor:
         data = resp.json()
         results = data.get("results", [])
         if results and "response" in results[0]:
-          res_body = results[0]["response"]
-          
-          if "error" in res_body:
-            print(f"Turso SQL Error: {res_body['error']}")
+          res_item = results[0]
+          if res_item.get("type") == "error":
+            print(f"Turso Pipeline Error: {res_item}")
             return
 
-          cols = res_body.get("cols", [])
+          res_body = res_item["response"]
+          if res_body.get("type") == "error":
+            print(f"Turso SQL Error: {res_body.get('error')}")
+            return
+
+          # Correctly extract from the nested 'result' dictionary in Turso v2 pipeline
+          sql_result = res_body.get("result", res_body)
+
+          cols = sql_result.get("cols", [])
           if cols:
             self.description = [
                 (col.get("name"), None, None, None, None, None, None)
@@ -109,14 +116,14 @@ class TursoCursor:
             ]
 
           rows = []
-          for row in res_body.get("rows", []):
+          for row in sql_result.get("rows", []):
             row_vals = [
                 cell.get("value") if isinstance(cell, dict) else cell
                 for cell in row
             ]
             rows.append(row_vals)
           self._fetchall_data = rows
-          self.lastrowid = res_body.get("last_insert_rowid")
+          self.lastrowid = sql_result.get("last_insert_rowid")
       else:
         print(f"Turso HTTP Error {resp.status_code}: {resp.text}")
     except Exception as e:
