@@ -503,7 +503,6 @@ with tab2:
       disc_html = f"<div style='display:inline-block; padding: 4px 12px; border-radius: 6px; background-color: {'#22c55e22' if disc_checked else '#ef444422'}; color: {'#22c55e' if disc_checked else '#ef4444'}; border: 1px solid {'#22c55e' if disc_checked else '#ef4444'}; font-weight: bold;'>{'☑' if disc_checked else '☐'} Discovery</div>"
 
       with st.container(border=True):
-        # Adjusted column widths to keep album art compact and scaled to text height block
         c1, c2 = st.columns([0.7, 4], gap="small")
         with c1:
           if log.get("image_url") or log.get("track_image_url"):
@@ -512,7 +511,6 @@ with tab2:
                 width=240,
             )
         with c2:
-          # Uploader name exactly above the song name with tight spacing
           st.markdown(
               f"<div style='color: {color_code}; font-weight: bold; font-size: 16px; margin-bottom: -10px;'>● {uploader_name}</div>",
               unsafe_allow_html=True,
@@ -557,12 +555,39 @@ with tab3:
     df_judged = df[df["score"].astype(int) > 0].copy()
     df_judged["score"] = df_judged["score"].astype(int)
     
-    st.subheader("Most Recent 10 Scores")
-    st.dataframe(
-        df_judged[["song_name", "artist", "score", "uploader_display_name"]].head(10),
-        height=300,
-        width="stretch"
-    )
+    st.subheader("Uploader Scorecards")
+    
+    # Calculate stats per uploader (excluding 11181482458)
+    df_scorecards = df_judged[df_judged["uploader"] != "11181482458"].groupby(
+        ["uploader", "uploader_display_name"]
+    ).agg(
+        Average_Score=("score", "mean"),
+        Saved_Count=("is_saved", lambda x: (x.astype(int) == 1).sum()),
+        Discovery_Count=("is_discovery", lambda x: (x.astype(int) == 1).sum()),
+        Total_Judged=("score", "count")
+    ).reset_index()
+    
+    df_scorecards = df_scorecards.sort_values(by="Average_Score", ascending=False).head(5)
+    
+    if df_scorecards.empty:
+      st.info("No uploader scorecard data available.")
+    else:
+      cols = st.columns(min(5, len(df_scorecards)))
+      for idx, (_, row) in enumerate(df_scorecards.iterrows()):
+        with cols[idx]:
+          color_code = get_uploader_color(row["uploader"])
+          avg_score = round(row["Average_Score"], 2)
+          saved_c = int(row["Saved_Count"])
+          disc_c = int(row["Discovery_Count"])
+          
+          with st.container(border=True):
+            st.markdown(
+                f"<div style='color: {color_code}; font-weight: bold; font-size: 16px; margin-bottom: 8px;'>● {row['uploader_display_name']}</div>",
+                unsafe_allow_html=True,
+            )
+            st.markdown(f"**Average score:** {avg_score} / 5")
+            st.markdown(f"**Saved songs:** {saved_c}")
+            st.markdown(f"**Discoveries:** {disc_c}")
 
     st.markdown("---")
     st.subheader("Uploader Performance")
@@ -580,7 +605,6 @@ with tab3:
 
       color_map = {row["uploader_display_name"]: get_uploader_color(row["uploader"]) for _, row in df_analytics.iterrows()}
 
-      # Bar chart representing mean with standard deviation (plus/minus error bars)
       fig = px.bar(
           stats,
           x="uploader_display_name",
