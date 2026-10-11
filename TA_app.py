@@ -25,7 +25,7 @@ TURSO_URL = st.secrets.get("TURSO_URL", "")
 TURSO_AUTH_TOKEN = st.secrets.get("TURSO_AUTH_TOKEN", "")
 
 
-# --- TURSO HTTP API ADAPTER (Full Pandas & SQLite Compatibility) ---
+# --- CORRECTED TURSO HTTP API ADAPTER & CONNECTION ---
 class TursoCursor:
 
   def __init__(self, url, token):
@@ -36,10 +36,14 @@ class TursoCursor:
         "Content-Type": "application/json",
     }
     self.lastrowid = None
-    self.description = None
+    self.description = []
     self._fetchall_data = []
 
   def execute(self, query, params=()):
+    self.description = []
+    self._fetchall_data = []
+    self.lastrowid = None
+
     if isinstance(params, tuple):
       params_list = list(params)
     elif isinstance(params, list):
@@ -59,19 +63,26 @@ class TursoCursor:
       else:
         args.append({"type": "text", "value": str(p)})
 
-    payload = {"statements": [{"sql": query, "args": args}]}
+    payload = {
+        "requests": [
+            {
+                "type": "execute",
+                "stmt": {"sql": query, "args": args},
+            },
+            {"type": "close"},
+        ]
+    }
 
     try:
       resp = requests.post(
-          f"{self.url}/v2/pipeline", json=payload, headers=self.headers, timeout=10
+          f"{self.url}/v2/pipeline", json=payload, headers=self.headers, timeout=15
       )
       if resp.status_code == 200:
         data = resp.json()
-        results = data.get("results", [{}])[0]
-        if "response" in results:
-          res_body = results["response"]
+        results = data.get("results", [])
+        if results and "response" in results[0]:
+          res_body = results[0]["response"]
           cols = res_body.get("cols", [])
-          # Populate description for pandas.read_sql compatibility (tuples of column name, type, etc.)
           self.description = [
               (col.get("name"), None, None, None, None, None, None)
               for col in cols
@@ -86,15 +97,8 @@ class TursoCursor:
             rows.append(row_vals)
           self._fetchall_data = rows
           self.lastrowid = res_body.get("last_insert_rowid")
-        else:
-          self.description = []
-          self._fetchall_data = []
-      else:
-        self.description = []
-        self._fetchall_data = []
     except Exception:
-      self.description = []
-      self._fetchall_data = []
+      pass
 
   def fetchone(self):
     if self._fetchall_data:
