@@ -94,7 +94,6 @@ class TursoCursor:
         if results and "response" in results[0]:
           res_body = results[0]["response"]
           
-          # Check for execution errors returned by Turso pipeline
           if "error" in res_body:
             print(f"Turso SQL Error: {res_body['error']}")
             return
@@ -155,6 +154,17 @@ def get_db_connection():
     return TursoConnection(TURSO_URL, TURSO_AUTH_TOKEN)
   else:
     return sqlite3.connect("spotify_tracker.db")
+
+
+def load_df_from_query(query, conn, params=()):
+  """Safely loads query results into a pandas DataFrame using cursor execution."""
+  cursor = conn.cursor()
+  cursor.execute(query, params)
+  rows = cursor.fetchall()
+  cols = [desc[0] for desc in cursor.description] if cursor.description else []
+  if not cols and rows:
+    cols = [f"col_{i}" for i in range(len(rows[0]))]
+  return pd.DataFrame(rows, columns=cols)
 
 
 # --- STYLING ---
@@ -319,7 +329,7 @@ if tab1 is not None:
     )
 
     conn = get_db_connection()
-    df_tracks = pd.read_sql("SELECT * FROM tracks ORDER BY added_at DESC", conn)
+    df_tracks = load_df_from_query("SELECT * FROM tracks ORDER BY added_at DESC", conn)
     conn.close()
 
     if df_tracks.empty:
@@ -340,7 +350,7 @@ if tab1 is not None:
           img_col, form_col = st.columns([1.2, 3])
           with img_col:
             if row.get("image_url"):
-              st.image(row["image_url"], width="stretch")
+              st.image(row["image_url"], use_container_width=True)
             else:
               st.caption("No Cover")
           with form_col:
@@ -413,7 +423,7 @@ PALETTE = ["#3b82f6", "#22c55e", "#eab308", "#ef4444", "#a855f7"]
 with tab2:
   st.header("📜 Live Judgement History Feed")
   conn = get_db_connection()
-  df_history = pd.read_sql(
+  df_history = load_df_from_query(
       """
       SELECT j.*, t.image_url as track_image_url, t.uploader, t.uploader_display_name 
       FROM judgement_log j 
@@ -437,7 +447,7 @@ with tab2:
           if log.get("image_url") or log.get("track_image_url"):
             st.image(
                 log.get("image_url") or log.get("track_image_url"),
-                width="stretch",
+                use_container_width=True,
             )
         with c2:
           st.markdown(f"### **{log['song_name']}**")
@@ -469,24 +479,24 @@ with tab2:
 with tab3:
   st.header("Performance Review")
   conn = get_db_connection()
-  df = pd.read_sql("SELECT * FROM tracks", conn)
+  df = load_df_from_query("SELECT * FROM tracks", conn)
   conn.close()
   if df.empty or df["score"].sum() == 0:
     st.info("Not enough judged data for analytics yet.")
   else:
     df_judged = df[df["score"] > 0]
-    st.dataframe(df_judged[["song_name", "artist", "score"]], width="stretch")
+    st.dataframe(df_judged[["song_name", "artist", "score"]], use_container_width=True)
 
 # --- TAB 4: DATABASE ---
 with tab4:
   st.header("Database View")
   conn = get_db_connection()
-  df_full = pd.read_sql("SELECT * FROM tracks", conn)
+  df_full = load_df_from_query("SELECT * FROM tracks", conn)
   conn.close()
   if df_full.empty:
     st.info("Database is currently empty.")
   else:
-    st.dataframe(df_full, width="stretch")
+    st.dataframe(df_full, use_container_width=True)
     st.download_button(
         "Download CSV",
         df_full.to_csv(index=False).encode("utf-8"),
