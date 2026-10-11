@@ -366,18 +366,24 @@ if tab1 is not None:
       st.info("No tracks found in the database.")
     else:
       for _, row in df_tracks.iterrows():
-        current_score = (
-            int(row["score"]) if row["score"] and row["score"] > 0 else 3
-        )
-        current_saved = bool(row["is_saved"])
-        current_disc = bool(row["is_discovery"])
+        # Safely convert score to integer first to avoid type comparison errors
+        try:
+          raw_score = int(row["score"]) if pd.notnull(row["score"]) else 0
+        except (ValueError, TypeError):
+          raw_score = 0
+
+        current_score = raw_score if raw_score > 0 else 3
+        current_saved = bool(int(row["is_saved"])) if pd.notnull(row["is_saved"]) else False
+        current_disc = bool(int(row["is_discovery"])) if pd.notnull(row["is_discovery"]) else False
         uploader_name = row.get("uploader_display_name") or row.get(
             "uploader", "Unknown"
         )
 
+        score_display = str(raw_score) if raw_score > 0 else "Unjudged"
+
         with st.expander(
             f"{row['song_name']} — {row['artist']} (Uploader: {uploader_name})"
-            f" | ⭐ {row['score'] if row['score'] else 'Unjudged'}"
+            f" | ⭐ {score_display}"
         ):
           img_col, form_col = st.columns([1.2, 3])
           with img_col:
@@ -513,10 +519,10 @@ with tab3:
   conn = get_db_connection()
   df = load_df_from_query("SELECT * FROM tracks", conn)
   conn.close()
-  if df.empty or df["score"].sum() == 0:
+  if df.empty or df["score"].astype(int).sum() == 0:
     st.info("Not enough judged data for analytics yet.")
   else:
-    df_judged = df[df["score"] > 0]
+    df_judged = df[df["score"].astype(int) > 0]
     st.dataframe(df_judged[["song_name", "artist", "score"]], width="stretch")
 
 # --- TAB 4: DATABASE ---
