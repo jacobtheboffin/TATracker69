@@ -590,7 +590,7 @@ with tab3:
             st.markdown(f"**Discoveries:** {disc_c}")
 
     st.markdown("---")
-    st.subheader("Uploader Performance")
+    st.subheader("Graph")
     
     df_analytics = df_judged[df_judged["uploader"] != "11181482458"]
     
@@ -605,7 +605,7 @@ with tab3:
 
       color_map = {row["uploader_display_name"]: get_uploader_color(row["uploader"]) for _, row in df_analytics.iterrows()}
 
-      fig = px.bar(
+      fig = px.scatter(
           stats,
           x="uploader_display_name",
           y="Average_Score",
@@ -621,7 +621,7 @@ with tab3:
           font_color="#ffffff",
           yaxis=dict(range=[0, 6], dtick=1)
       )
-      st.plotly_chart(fig, width="stretch")
+      st.plotly_chart(fig, width="content")
 
 # --- TAB 4: DATABASE ---
 with tab4:
