@@ -24,12 +24,15 @@ EMBEDDED_PLAYLIST_ID = st.secrets.get(
 TURSO_URL = st.secrets.get("TURSO_URL", "")
 TURSO_AUTH_TOKEN = st.secrets.get("TURSO_AUTH_TOKEN", "")
 
-# --- SAFE CACHE LOADER ---
+# --- SAFE CACHE LOADER (ROBUST FOR STRINGS OR DICTS) ---
 SPOTIFY_CACHE_PATH = "/tmp/.cache"
 if "SPOTIFY_CACHE_JSON" in st.secrets:
   try:
-    raw_json = st.secrets["SPOTIFY_CACHE_JSON"]
-    parsed = json.loads(raw_json)
+    cache_data = st.secrets["SPOTIFY_CACHE_JSON"]
+    if isinstance(cache_data, str):
+      parsed = json.loads(cache_data)
+    else:
+      parsed = dict(cache_data)
     with open(SPOTIFY_CACHE_PATH, "w") as f:
       json.dump(parsed, f)
   except Exception as e:
@@ -290,7 +293,9 @@ def sync_spotify_playlist():
     conn.commit()
     conn.close()
   except Exception as e:
-    st.sidebar.error(f"Sync Notice: {e}")
+    st.sidebar.error(
+        f"Spotify Sync Notice: {e}. (If invalid_grant, please refresh your SPOTIFY_CACHE_JSON secret)"
+    )
 
 
 if "auto_synced" not in st.session_state:
