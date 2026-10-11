@@ -39,6 +39,26 @@ if "SPOTIFY_CACHE_JSON" in st.secrets:
     st.error(f"⚠️ Cache JSON error: {e}")
 
 
+# --- SAFE IMAGE EXTRACTOR HELPER ---
+def extract_image_url(track_info):
+  """Safely extracts image URL from track_info regardless of data type variations."""
+  try:
+    album = track_info.get("album", {})
+    if isinstance(album, dict):
+      images = album.get("images", [])
+      if isinstance(images, list) and len(images) > 0:
+        first_img = images[0]
+        if isinstance(first_img, dict):
+          return first_img.get("url", "")
+        elif isinstance(first_img, str):
+          return first_img
+      elif isinstance(images, str):
+        return images
+  except Exception:
+    pass
+  return ""
+
+
 # --- HARDENED TURSO HTTP API ADAPTER ---
 class TursoCursor:
 
@@ -105,7 +125,6 @@ class TursoCursor:
             print(f"Turso SQL Error: {res_body.get('error')}")
             return
 
-          # Correctly extract from the nested 'result' dictionary in Turso v2 pipeline
           sql_result = res_body.get("result", res_body)
 
           cols = sql_result.get("cols", [])
@@ -268,9 +287,7 @@ def sync_spotify_playlist():
           [ar.get("name", "Unknown") for ar in track_info.get("artists", [])]
       )
 
-      album = track_info.get("album", {})
-      images = album.get("images", [])
-      image_url = images[0].get("url", "") if images else ""
+      image_url = extract_image_url(track_info)
 
       added_by_obj = item.get("added_by")
       added_by = (
@@ -278,9 +295,7 @@ def sync_spotify_playlist():
       )
       added_at = item.get("added_at")
 
-      cursor.execute(
-          "SELECT id FROM tracks WHERE id = ?", (track_id,)
-      )
+      cursor.execute("SELECT id FROM tracks WHERE id = ?", (track_id,))
       if not cursor.fetchone():
         cursor.execute(
             """
@@ -301,7 +316,8 @@ def sync_spotify_playlist():
     conn.close()
   except Exception as e:
     st.sidebar.error(
-        f"Spotify Sync Notice: {e}. (If invalid_grant, please refresh your SPOTIFY_CACHE_JSON secret)"
+        f"Spotify Sync Notice: {e}. (If invalid_grant, please refresh your"
+        " SPOTIFY_CACHE_JSON secret)"
     )
 
 
@@ -341,14 +357,18 @@ if tab1 is not None:
     )
 
     conn = get_db_connection()
-    df_tracks = load_df_from_query("SELECT * FROM tracks ORDER BY added_at DESC", conn)
+    df_tracks = load_df_from_query(
+        "SELECT * FROM tracks ORDER BY added_at DESC", conn
+    )
     conn.close()
 
     if df_tracks.empty:
       st.info("No tracks found in the database.")
     else:
       for _, row in df_tracks.iterrows():
-        current_score = int(row["score"]) if row["score"] and row["score"] > 0 else 3
+        current_score = (
+            int(row["score"]) if row["score"] and row["score"] > 0 else 3
+        )
         current_saved = bool(row["is_saved"])
         current_disc = bool(row["is_discovery"])
         uploader_name = row.get("uploader_display_name") or row.get(
