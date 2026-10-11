@@ -503,25 +503,26 @@ with tab2:
       disc_html = f"<div style='display:inline-block; padding: 4px 12px; border-radius: 6px; background-color: {'#22c55e22' if disc_checked else '#ef444422'}; color: {'#22c55e' if disc_checked else '#ef4444'}; border: 1px solid {'#22c55e' if disc_checked else '#ef4444'}; font-weight: bold;'>{'☑' if disc_checked else '☐'} Discovery</div>"
 
       with st.container(border=True):
-        c1, c2 = st.columns([1.2, 3])
+        # Adjusted column widths to keep album art compact and scaled to text height block
+        c1, c2 = st.columns([1.1, 4], gap="medium")
         with c1:
           if log.get("image_url") or log.get("track_image_url"):
             st.image(
                 log.get("image_url") or log.get("track_image_url"),
-                width="stretch",
+                width=240,
             )
         with c2:
-          # Uploader name exactly above the song name
+          # Uploader name exactly above the song name with tight spacing
           st.markdown(
-              f"<div style='color: {color_code}; font-weight: bold; font-size: 24px; margin-bottom: 2px;'>● {uploader_name}</div>",
+              f"<div style='color: {color_code}; font-weight: bold; font-size: 16px; margin-bottom: -10px;'>● {uploader_name}</div>",
               unsafe_allow_html=True,
           )
           st.markdown(f"### **{log['song_name']}**")
           st.markdown(
-              f"**Artist:** *{log['artist']}* | **Score:** ⭐ {log['score']}/5"
+              f"<p style='margin-top: -15px; margin-bottom: 10px; color: #cbd5e1;'><b>Artist:</b> <i>{log['artist']}</i> | <b>Score:</b> ⭐ {log['score']}/5</p>",
+              unsafe_allow_html=True,
           )
-          st.markdown(f"{saved_html} &nbsp;&nbsp; {disc_html}", unsafe_allow_html=True)
-
+          st.markdown(f"<div style='margin-bottom: 8px;'>{saved_html} &nbsp;&nbsp; {disc_html}</div>", unsafe_allow_html=True)
           st.caption(f"🕒 Judged on {log['timestamp']}")
           
           if st.session_state.is_admin:
@@ -580,7 +581,7 @@ with tab3:
       color_map = {row["uploader_display_name"]: get_uploader_color(row["uploader"]) for _, row in df_analytics.iterrows()}
 
       # Bar chart representing mean with standard deviation (plus/minus error bars)
-      fig = px.scatter(
+      fig = px.bar(
           stats,
           x="uploader_display_name",
           y="Average_Score",
