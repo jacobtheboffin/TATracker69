@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 import json
 import os
+import plotly.express as px
 import requests
 import sqlite3
 import pandas as pd
@@ -37,6 +38,15 @@ if "SPOTIFY_CACHE_JSON" in st.secrets:
       json.dump(parsed, f)
   except Exception as e:
     st.error(f"⚠️ Cache JSON error: {e}")
+
+
+# --- CONSISTENT UPLOADER COLOR PALETTE ---
+PALETTE = ["#3b82f6", "#22c55e", "#eab308", "#ef4444", "#a855f7", "#ec4899", "#14b8a6"]
+
+def get_uploader_color(uploader_id):
+  if not uploader_id:
+    return "#cbd5e1"
+  return PALETTE[abs(hash(str(uploader_id))) % len(PALETTE)]
 
 
 # --- SAFE IMAGE EXTRACTOR HELPER ---
@@ -281,6 +291,16 @@ def sync_spotify_playlist():
       track_info = item.get("item") or item.get("track")
       if not track_info:
         continue
+      
+      added_by_obj = item.get("added_by")
+      added_by = (
+          added_by_obj.get("id", "unknown") if added_by_obj else "unknown"
+      )
+
+      # Exclude uploader '11181482458' from being added to the database
+      if added_by == "11181482458":
+        continue
+
       track_id = track_info.get("id")
       song_name = track_info.get("name", "Unknown Track")
       artist = ", ".join(
@@ -288,11 +308,6 @@ def sync_spotify_playlist():
       )
 
       image_url = extract_image_url(track_info)
-
-      added_by_obj = item.get("added_by")
-      added_by = (
-          added_by_obj.get("id", "unknown") if added_by_obj else "unknown"
-      )
       added_at = item.get("added_at")
 
       cursor.execute("SELECT id FROM tracks WHERE id = ?", (track_id,))
@@ -332,7 +347,7 @@ if "is_admin" not in st.session_state:
 
 if st.session_state.is_admin:
   tab1, tab2, tab3, tab4, tab5 = st.tabs([
-      "🎯 Judge",
+      "🎯 Judge & Rejudge",
       "📜 Judgement History",
       "📊 Live Analytics",
       "📁 Database / Spreadsheet",
@@ -347,43 +362,45 @@ else:
       "🔐 Access Control",
   ])
 
-# --- TAB 1: JUDGE ALL TRACKS ---
+# --- TAB 1: JUDGE & REJUDGE UNJUDGED TRACKS ---
 if tab1 is not None:
   with tab1:
-    st.header("Rate and Review")
+    st.header("Rate & Judge New Tracks")
     st.caption(
-        "New tracks for judgement are below."
+        "Listing only unjudged tracks (score of 0), excluding uploader"
+        " 11181482458."
     )
 
     conn = get_db_connection()
+    # Judge tab must only include songs that have not been judged before (score of 0 or NULL), excluding uploader 11181482458
     df_tracks = load_df_from_query(
-        "SELECT * FROM tracks ORDER BY added_at DESC", conn
+        """
+        SELECT * FROM tracks 
+        WHERE (score = 0 OR score IS NULL) 
+        AND uploader != '11181482458' 
+        ORDER BY added_at DESC
+    """,
+        conn,
     )
     conn.close()
 
     if df_tracks.empty:
-      st.info("No new tracks found in the database.")
+      st.info("No unjudged tracks found in the database.")
     else:
       for _, row in df_tracks.iterrows():
-        # Safely convert score to integer first to avoid type comparison errors
-        try:
-          raw_score = int(row["score"]) if pd.notnull(row["score"]) else 0
-        except (ValueError, TypeError):
-          raw_score = 0
-
-        current_score = raw_score if raw_score > 0 else 3
-        current_saved = bool(int(row["is_saved"])) if pd.notnull(row["is_saved"]) else False
-        current_disc = bool(int(row["is_discovery"])) if pd.notnull(row["is_discovery"]) else False
         uploader_name = row.get("uploader_display_name") or row.get(
             "uploader", "Unknown"
         )
-
-        score_display = str(raw_score) if raw_score > 0 else "Unjudged"
+        color_code = get_uploader_color(row.get("uploader"))
 
         with st.expander(
-            f"{row['song_name']} — {row['artist']} (Uploader: {uploader_name})"
-            f" | ⭐ {score_display}"
+            f"{row['song_name']} — {row['artist']} | Uploader: {uploader_name} | ⭐ Unjudged"
         ):
+          st.markdown(
+              f"<span style='color: {color_code}; font-weight: bold;'>●"
+              f" Uploader: {uploader_name}</span>",
+              unsafe_allow_html=True,
+          )
           img_col, form_col = st.columns([1.2, 3])
           with img_col:
             if row.get("image_url"):
@@ -397,19 +414,19 @@ if tab1 is not None:
                   "Score (1-5)",
                   1,
                   5,
-                  current_score,
+                  3,
                   key=f"score_{row['id']}",
               )
             with c2:
               is_saved = st.checkbox(
                   "Saved Song?",
-                  current_saved,
+                  False,
                   key=f"saved_{row['id']}",
               )
             with c3:
               is_discovery = st.checkbox(
                   "Is a Discovery?",
-                  current_disc,
+                  False,
                   key=f"disc_{row['id']}",
               )
 
@@ -454,8 +471,6 @@ if tab1 is not None:
               st.success(f"Updated judgement for '{row['song_name']}'!")
               st.rerun()
 
-PALETTE = ["#3b82f6", "#22c55e", "#eab308", "#ef4444", "#a855f7"]
-
 # --- TAB 2: HISTORY ---
 with tab2:
   st.header("📜 Live Judgement History Feed")
@@ -478,7 +493,18 @@ with tab2:
     )
   else:
     for _, log in df_history.iterrows():
+      uploader_name = log.get("uploader_display_name") or log.get("uploader", "Unknown")
+      color_code = get_uploader_color(log.get("uploader"))
+      
+      saved_checked = bool(log["is_saved"])
+      disc_checked = bool(log["is_discovery"])
+
       with st.container(border=True):
+        st.markdown(
+            f"<span style='color: {color_code}; font-weight: bold;'>●"
+            f" Uploader: {uploader_name}</span>",
+            unsafe_allow_html=True,
+        )
         c1, c2, c3 = st.columns([1.2, 3, 1.2])
         with c1:
           if log.get("image_url") or log.get("track_image_url"):
@@ -491,6 +517,14 @@ with tab2:
           st.markdown(
               f"**Artist:** *{log['artist']}* | **Score:** ⭐ {log['score']}/5"
           )
+          
+          # Tick box list for saved and discovery status
+          sc1, sc2 = st.columns(2)
+          with sc1:
+            st.checkbox("Saved Song", value=saved_checked, disabled=True, key=f"hist_saved_{log['id']}")
+          with sc2:
+            st.checkbox("Discovery", value=disc_checked, disabled=True, key=f"hist_disc_{log['id']}")
+
           st.caption(f"🕒 Judged on {log['timestamp']}")
         with c3:
           if st.session_state.is_admin:
@@ -518,11 +552,51 @@ with tab3:
   conn = get_db_connection()
   df = load_df_from_query("SELECT * FROM tracks", conn)
   conn.close()
+  
   if df.empty or df["score"].astype(int).sum() == 0:
     st.info("Not enough judged data for analytics yet.")
   else:
-    df_judged = df[df["score"].astype(int) > 0]
-    st.dataframe(df_judged[["song_name", "artist", "score"]], width="stretch")
+    df_judged = df[df["score"].astype(int) > 0].copy()
+    df_judged["score"] = df_judged["score"].astype(int)
+    
+    st.subheader("Most Recent 10 Scores")
+    # Live analytics table showing only the most recent 10 scores with scroll function
+    st.dataframe(
+        df_judged[["song_name", "artist", "score", "uploader_display_name"]].head(10),
+        height=300,
+        width="stretch"
+    )
+
+    st.markdown("---")
+    st.subheader("Uploader Performance Statistics (Excluding 11181482458)")
+    
+    # Exclude uploader '11181482458' from analytics graph
+    df_analytics = df_judged[df_judged["uploader"] != "11181482458"]
+    
+    if df_analytics.empty:
+      st.info("No analytics data available for valid uploaders.")
+    else:
+      stats = df_analytics.groupby("uploader_display_name").agg(
+          Average_Score=("score", "mean"),
+          Std_Dev=("score", "std")
+      ).reset_index()
+      stats["Std_Dev"] = stats["Std_Dev"].fillna(0)
+
+      # Create distinct color mapping for uploaders
+      color_map = {row["uploader_display_name"]: get_uploader_color(row["uploader"]) for _, row in df_analytics.iterrows()}
+
+      fig = px.bar(
+          stats,
+          x="uploader_display_name",
+          y="Average_Score",
+          error_y="Std_Dev",
+          title="Average Score and Standard Deviation by Uploader",
+          labels={"uploader_display_name": "Uploader", "Average_Score": "Average Score"},
+          color="uploader_display_name",
+          color_discrete_map=color_map
+      )
+      fig.update_layout(paper_bgcolor="#0d0e12", plot_bgcolor="#0d0e12", font_color="#ffffff")
+      st.plotly_chart(fig, width="stretch")
 
 # --- TAB 4: DATABASE ---
 with tab4:
@@ -546,6 +620,30 @@ with tab5:
   st.header("🔐 Access Control")
   if st.session_state.is_admin:
     st.success("🔓 Admin Mode Active")
+    
+    st.subheader("Manage Uploader Display Names")
+    conn = get_db_connection()
+    df_uploaders = load_df_from_query("SELECT DISTINCT uploader, uploader_display_name FROM tracks WHERE uploader != '11181482458'", conn)
+    conn.close()
+
+    if not df_uploaders.empty:
+      for _, u_row in df_uploaders.iterrows():
+        u_id = u_row["uploader"]
+        current_name = u_row["uploader_display_name"] or u_id
+        new_name = st.text_input(f"Display name for ID: {u_id}", value=current_name, key=f"name_update_{u_id}")
+        if st.button(f"Update Name for {u_id}", key=f"btn_name_{u_id}"):
+          conn = get_db_connection()
+          cursor = conn.cursor()
+          cursor.execute(
+              "UPDATE tracks SET uploader_display_name = ? WHERE uploader = ?",
+              (new_name, u_id)
+          )
+          conn.commit()
+          conn.close()
+          st.success(f"Successfully updated uploader name to '{new_name}' in Turso DB!")
+          st.rerun()
+
+    st.markdown("---")
     if st.button("🔒 Logout"):
       st.session_state.is_admin = False
       st.rerun()
@@ -562,7 +660,7 @@ with tab5:
       st.success("Wiped clean.")
       st.rerun()
   else:
-    st.info("Enter admin password (`admin123`) to access tools.")
+    st.info("Enter admin password to access administrative tools.")
     p = st.text_input("Password", type="password")
     if p == "admin123":
       st.session_state.is_admin = True
