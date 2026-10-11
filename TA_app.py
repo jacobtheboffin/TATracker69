@@ -5,7 +5,7 @@ import requests
 import sqlite3
 import pandas as pd
 import spotipy
-from spotipy.oauth2 import SpotifyClientCredentials
+from spotipy.oauth2 import SpotifyOAuth
 import streamlit as st
 
 # --- CONFIGURATION & SETUP ---
@@ -24,6 +24,13 @@ EMBEDDED_PLAYLIST_ID = st.secrets.get(
 
 TURSO_URL = st.secrets.get("TURSO_URL", "")
 TURSO_AUTH_TOKEN = st.secrets.get("TURSO_AUTH_TOKEN", "")
+
+# --- WRITE INJECTED SPOTIFY CACHE TO /TMP ON STREAMLIT CLOUD ---
+if "SPOTIFY_CACHE_JSON" in st.secrets:
+  with open("/tmp/.cache", "w") as f:
+    f.write(st.secrets["SPOTIFY_CACHE_JSON"])
+
+SPOTIFY_CACHE_PATH = "/tmp/.cache" if os.path.exists("/tmp") else ".cache"
 
 
 # --- TURSO HTTP API ADAPTER (Correct Hrana Pipeline Format) ---
@@ -142,29 +149,21 @@ def get_db_connection():
 st.markdown(
     """
     <style>
-        /* Overall App Background & Dark Text Setup */
         .stApp, [data-testid="stAppViewContainer"], [data-testid="stHeader"] {
             background-color: #0d0e12 !important;
             color: #ffffff !important;
         }
-
-        /* General Typography & Headers */
         p, span, label, h1, h2, h3, h4, h5, h6, .stMarkdown {
             color: #f8fafc !important;
         }
-
-        /* Sidebar Styling */
         [data-testid="stSidebar"] {
             background-color: #14161b !important;
             border-right: 1px solid #232631 !important;
             padding-top: 1rem;
         }
-
-        /* Viewport Sticky Tabs Container */
         .main, .block-container {
             overflow: visible !important;
         }
-
         .stTabs {
             position: sticky;
             top: 0px;
@@ -174,8 +173,6 @@ st.markdown(
             padding-bottom: 16px;
             margin-bottom: 24px;
         }
-
-        /* Tab Bar Outer Track */
         .stTabs [data-baseweb="tab-list"] {
             background-color: #14161b !important;
             border: 1px solid #2b3040 !important;
@@ -183,8 +180,6 @@ st.markdown(
             padding: 8px 12px !important;
             gap: 12px !important;
         }
-
-        /* FULLY ROUNDED TAB BUTTONS */
         .stTabs [data-baseweb="tab-list"] button,
         .stTabs button[role="tab"] {
             font-size: 16px !important;
@@ -198,18 +193,15 @@ st.markdown(
             outline: none !important;
             box-shadow: none !important;
         }
-
         .stTabs [data-baseweb="tab-highlight-container"],
         [data-baseweb="tab-border-bar"] {
             display: none !important;
         }
-
         .stTabs button[role="tab"]:hover {
             color: #ffffff !important;
             background-color: #252e3f !important;
             border-color: #60a5fa !important;
         }
-
         .stTabs button[role="tab"][aria-selected="true"] {
             color: #ffffff !important;
             background-color: #2563eb !important; 
@@ -217,11 +209,9 @@ st.markdown(
             font-weight: 800 !important;
             box-shadow: 0 4px 18px rgba(37, 99, 235, 0.4) !important;
         }
-
         button[title="View fullscreen"], [data-testid="stImage"] button {
             display: none !important;
         }
-
         .stTextInput input {
             background-color: #1e222d !important;
             color: #ffffff !important;
@@ -233,14 +223,12 @@ st.markdown(
             border-color: #60a5fa !important;
             box-shadow: 0 0 0 1px #60a5fa !important;
         }
-
         [data-testid="stVerticalBlockBorderWrapper"] {
             border-color: #2b3040 !important;
             border-radius: 14px !important;
             background-color: #12151e !important;
             margin-bottom: 16px !important;
         }
-
         .stButton button, button {
             background-color: #1e2530 !important;
             color: #ffffff !important;
@@ -255,7 +243,6 @@ st.markdown(
             border-color: #60a5fa !important;
             color: #ffffff !important;
         }
-
         button[key*="undo_"] {
             background-color: #2b1f1f !important;
             color: #fca5a5 !important;
@@ -265,7 +252,6 @@ st.markdown(
             background-color: #dc2626 !important;
             color: #ffffff !important;
         }
-
         .stDownloadButton button {
             background-color: #166534 !important;
             color: #ffffff !important;
@@ -275,7 +261,6 @@ st.markdown(
             background-color: #15803d !important;
             border-color: #4ade80 !important;
         }
-
         .feed-score {
             color: #cbd5e1 !important;
             font-weight: 600;
@@ -287,7 +272,6 @@ st.markdown(
 )
 
 
-# Initialize Database Safely
 def init_db():
   conn = get_db_connection()
   cursor = conn.cursor()
@@ -333,7 +317,19 @@ init_db()
 def fetch_user_display_name(client_id, client_secret, user_id):
   if not user_id or user_id == "unknown":
     return "Unknown"
-  return user_id
+  try:
+    auth_manager = SpotifyOAuth(
+        client_id=client_id.strip(),
+        client_secret=client_secret.strip(),
+        redirect_uri="http://127.0.0.1:8888/callback",
+        scope="playlist-read-private",
+        cache_path=SPOTIFY_CACHE_PATH,
+    )
+    sp = spotipy.Spotify(auth_manager=auth_manager)
+    user_info = sp.user(user_id)
+    return user_info.get("display_name") or user_id
+  except Exception:
+    return user_id
 
 
 def extract_cover_art(sp, track_info, track_id=None):
@@ -361,7 +357,6 @@ def extract_cover_art(sp, track_info, track_id=None):
   return ""
 
 
-# --- AUTOMATIC SPOTIFY SYNC LOGIC (Headless Client Credentials) ---
 def sync_spotify_playlist():
   if (
       not SPOTIFY_CLIENT_ID
@@ -371,9 +366,13 @@ def sync_spotify_playlist():
     return
 
   try:
-    auth_manager = SpotifyClientCredentials(
+    auth_manager = SpotifyOAuth(
         client_id=SPOTIFY_CLIENT_ID.strip(),
         client_secret=SPOTIFY_CLIENT_SECRET.strip(),
+        redirect_uri="http://127.0.0.1:8888/callback",
+        scope="playlist-read-private playlist-read-collaborative",
+        open_browser=False,
+        cache_path=SPOTIFY_CACHE_PATH,
     )
     sp = spotipy.Spotify(auth_manager=auth_manager)
     user_market = "GB"
@@ -452,12 +451,10 @@ def sync_spotify_playlist():
     st.error(f"❌ Spotify Sync Error: {e}")
 
 
-# Run automatic sync on session startup
 if "auto_synced" not in st.session_state:
   sync_spotify_playlist()
   st.session_state.auto_synced = True
 
-# --- STREAMLIT UI ---
 st.title("🎯 Objective Judgement Zone")
 
 if "is_admin" not in st.session_state:
@@ -480,7 +477,6 @@ else:
       "🔐 Access Control",
   ])
 
-# --- TAB 1: JUDGE NEW TRACKS (Admin Only) ---
 if tab1 is not None:
   with tab1:
     st.header("Rate and Review Unjudged Additions")
@@ -572,7 +568,6 @@ if tab1 is not None:
 
 PALETTE = ["#3b82f6", "#22c55e", "#eab308", "#ef4444", "#a855f7"]
 
-# --- TAB 2: JUDGEMENT HISTORY (VERTICAL FEED) ---
 with tab2:
   st.header("📜 Live Judgement History Feed")
   st.caption("A History of Failures (and successes)")
@@ -668,7 +663,6 @@ with tab2:
           else:
             st.caption("🔒 Admin mode required")
 
-# --- TAB 3: LIVE ANALYTICS ---
 with tab3:
   st.header("Performance Review")
 
@@ -748,7 +742,6 @@ with tab3:
 
       st.altair_chart(chart, width="stretch")
 
-# --- TAB 4: DATABASE / SPREADSHEET VIEW ---
 with tab4:
   st.header("Database View & Spreadsheet Export")
   conn = get_db_connection()
@@ -821,7 +814,6 @@ with tab4:
         mime="text/csv",
     )
 
-# --- TAB 5: ACCESS CONTROL & ADMIN MANAGEMENT ---
 with tab5:
   st.header("🔐 Access Control & Management")
 
