@@ -332,7 +332,7 @@ if "is_admin" not in st.session_state:
 
 if st.session_state.is_admin:
   tab1, tab2, tab3, tab4, tab5 = st.tabs([
-      "🎯 Judge & Rejudge",
+      "🎯 Judge",
       "📜 Judgement History",
       "📊 Live Analytics",
       "📁 Database / Spreadsheet",
@@ -347,13 +347,12 @@ else:
       "🔐 Access Control",
   ])
 
-# --- TAB 1: JUDGE & REJUDGE ALL TRACKS ---
+# --- TAB 1: JUDGE ALL TRACKS ---
 if tab1 is not None:
   with tab1:
-    st.header("Rate, Review & Rejudge Tracks")
+    st.header("Rate and Review")
     st.caption(
-        "All playlist tracks are listed below. You can update your ratings or"
-        " score new ones at any time."
+        "New tracks for judgement are below."
     )
 
     conn = get_db_connection()
@@ -363,7 +362,7 @@ if tab1 is not None:
     conn.close()
 
     if df_tracks.empty:
-      st.info("No tracks found in the database.")
+      st.info("No new tracks found in the database.")
     else:
       for _, row in df_tracks.iterrows():
         # Safely convert score to integer first to avoid type comparison errors
