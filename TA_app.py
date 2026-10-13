@@ -347,6 +347,13 @@ def sync_spotify_playlist():
             image_url = extract_image_url(track_info)
             added_at = item.get("added_at")
 
+            # Check if this uploader already has a customized display name in the database
+            cursor.execute("SELECT uploader_display_name FROM tracks WHERE uploader = ? LIMIT 1", (added_by,))
+            name_row = cursor.fetchone()
+            uploader_display_name = added_by
+            if name_row and name_row[0]:
+                uploader_display_name = name_row[0]
+
             cursor.execute("SELECT id FROM tracks WHERE id = ?", (track_id,))
             if not cursor.fetchone():
                 cursor.execute(
@@ -359,7 +366,7 @@ def sync_spotify_playlist():
                         song_name,
                         artist,
                         added_by,
-                        added_by,
+                        uploader_display_name,
                         image_url,
                         added_at,
                     ),
@@ -682,15 +689,15 @@ with tab5:
         
         st.subheader("Manage Uploader Display Names")
         conn = get_db_connection()
-        df_uploaders = load_df_from_query("SELECT DISTINCT uploader, uploader_display_name FROM tracks WHERE uploader != '11181482458'", conn)
+        df_uploaders = load_df_from_query("SELECT uploader, MAX(uploader_display_name) as uploader_display_name FROM tracks WHERE uploader != '11181482458' GROUP BY uploader", conn)
         conn.close()
 
         if not df_uploaders.empty:
-            for _, u_row in df_uploaders.iterrows():
+            for idx, u_row in df_uploaders.iterrows():
                 u_id = u_row["uploader"]
                 current_name = u_row["uploader_display_name"] or u_id
-                new_name = st.text_input(f"Display name for ID: {u_id}", value=current_name, key=f"name_update_{u_id}")
-                if st.button(f"Update Name for {u_id}", key=f"btn_name_{u_id}"):
+                new_name = st.text_input(f"Display name for ID: {u_id}", value=current_name, key=f"name_update_{u_id}_{idx}")
+                if st.button(f"Update Name for {u_id}", key=f"btn_name_{u_id}_{idx}"):
                     conn = get_db_connection()
                     cursor = conn.cursor()
                     cursor.execute(
