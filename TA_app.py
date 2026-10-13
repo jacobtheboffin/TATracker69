@@ -347,7 +347,6 @@ def sync_spotify_playlist():
             image_url = extract_image_url(track_info)
             added_at = item.get("added_at")
 
-            # Check if this uploader already has a customized display name in the database
             cursor.execute("SELECT uploader_display_name FROM tracks WHERE uploader = ? LIMIT 1", (added_by,))
             name_row = cursor.fetchone()
             uploader_display_name = added_by
@@ -608,6 +607,14 @@ with tab3:
             Total_Judged=("score", "count")
         ).reset_index()
         
+        # Calculate total uploads per uploader from all tracks
+        total_uploads_map = df[df["uploader"] != "11181482458"].groupby("uploader").size().to_dict()
+        df_scorecards["Total_Uploads"] = df_scorecards["uploader"].map(total_uploads_map).fillna(1)
+        
+        # Calculate percentages against total uploads
+        df_scorecards["Saved_Pct"] = (df_scorecards["Saved_Count"] / df_scorecards["Total_Uploads"] * 100).round(1)
+        df_scorecards["Discovery_Pct"] = (df_scorecards["Discovery_Count"] / df_scorecards["Total_Uploads"] * 100).round(1)
+        
         df_scorecards = df_scorecards.sort_values(by="Average_Score", ascending=False).head(5)
         
         if df_scorecards.empty:
@@ -619,7 +626,9 @@ with tab3:
                     color_code = get_uploader_color(row["uploader"])
                     avg_score = round(row["Average_Score"], 2)
                     saved_c = int(row["Saved_Count"])
+                    saved_pct = row["Saved_Pct"]
                     disc_c = int(row["Discovery_Count"])
+                    disc_pct = row["Discovery_Pct"]
                     
                     with st.container(border=True):
                         st.markdown(
@@ -627,8 +636,8 @@ with tab3:
                             unsafe_allow_html=True,
                         )
                         st.markdown(f"**Average score:** {avg_score} / 5")
-                        st.markdown(f"**Saved songs:** {saved_c}")
-                        st.markdown(f"**Discoveries:** {disc_c}")
+                        st.markdown(f"**Saved songs:** {saved_c} ({saved_pct}%)")
+                        st.markdown(f"**Discoveries:** {disc_c} ({disc_pct}%)")
 
     st.markdown("---")
     st.subheader("Graph")
