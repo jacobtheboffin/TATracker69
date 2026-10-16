@@ -601,7 +601,7 @@ with tab3:
         df_scorecards = df_judged[df_judged["uploader"] != "11181482458"].groupby(
             ["uploader", "uploader_display_name"]
         ).agg(
-            Average_Score=("score", "mean"),
+            Average_Score=("score", "median"),
             Saved_Count=("is_saved", lambda x: (x.astype(int) == 1).sum()),
             Discovery_Count=("is_discovery", lambda x: (x.astype(int) == 1).sum()),
             Total_Judged=("score", "count")
@@ -648,7 +648,7 @@ with tab3:
         st.info("No analytics data available for valid uploaders.")
     else:
         stats = df_analytics.groupby("uploader_display_name").agg(
-            Average_Score=("score", "mean"),
+            Average_Score=("score", "median"),
             Std_Dev=("score", "std")
         ).reset_index()
         stats["Std_Dev"] = stats["Std_Dev"].fillna(0)
