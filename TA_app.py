@@ -601,7 +601,7 @@ with tab3:
         df_scorecards = df_judged[df_judged["uploader"] != "11181482458"].groupby(
             ["uploader", "uploader_display_name"]
         ).agg(
-            Average_Score=("score", "median"),
+            Median_Score=("score", "median"),
             Saved_Count=("is_saved", lambda x: (x.astype(int) == 1).sum()),
             Discovery_Count=("is_discovery", lambda x: (x.astype(int) == 1).sum()),
             Total_Judged=("score", "count")
@@ -613,7 +613,7 @@ with tab3:
         df_scorecards["Saved_Pct"] = (df_scorecards["Saved_Count"] / df_scorecards["Total_Uploads"] * 100).round(1)
         df_scorecards["Discovery_Pct"] = (df_scorecards["Discovery_Count"] / df_scorecards["Total_Uploads"] * 100).round(1)
         
-        df_scorecards = df_scorecards.sort_values(by="Average_Score", ascending=False).head(5)
+        df_scorecards = df_scorecards.sort_values(by="Median_Score", ascending=False).head(5)
         
         if df_scorecards.empty:
             st.info("No uploader scorecard data available.")
@@ -622,7 +622,7 @@ with tab3:
             for idx, (_, row) in enumerate(df_scorecards.iterrows()):
                 with cols[idx]:
                     color_code = get_uploader_color(row["uploader"])
-                    avg_score = round(row["Average_Score"], 2)
+                    median_score = round(row["Median_Score"], 2)
                     saved_c = int(row["Saved_Count"])
                     saved_pct = row["Saved_Pct"]
                     disc_c = int(row["Discovery_Count"])
@@ -633,7 +633,7 @@ with tab3:
                             f"<div style='color: {color_code}; font-weight: bold; font-size: 16px; margin-bottom: 8px;'>● {row['uploader_display_name']}</div>",
                             unsafe_allow_html=True,
                         )
-                        st.markdown(f"**Average score:** {avg_score} / 5")
+                        st.markdown(f"**Median score:** {median_score} / 5")
                         st.markdown(f"**Saved songs:** {saved_c} ({saved_pct}%)")
                         st.markdown(f"**Discoveries:** {disc_c} ({disc_pct}%)")
 
@@ -645,14 +645,12 @@ with tab3:
     if df_analytics.empty:
         st.info("No analytics data available for valid uploaders.")
     else:
-        # Calculate Median and IQR (Q3 - Q1) for each uploader
         stats = df_analytics.groupby("uploader_display_name").agg(
             Median_Score=("score", "median"),
             Q1=("score", lambda x: x.quantile(0.25)),
             Q3=("score", lambda x: x.quantile(0.75))
         ).reset_index()
         
-        # Calculate asymmetric error bars or symmetric error approximation for IQR bounds
         stats["IQR_Minus"] = stats["Median_Score"] - stats["Q1"]
         stats["IQR_Plus"] = stats["Q3"] - stats["Median_Score"]
 
