@@ -607,11 +607,9 @@ with tab3:
             Total_Judged=("score", "count")
         ).reset_index()
         
-        # Calculate total uploads per uploader from all tracks
         total_uploads_map = df[df["uploader"] != "11181482458"].groupby("uploader").size().to_dict()
         df_scorecards["Total_Uploads"] = df_scorecards["uploader"].map(total_uploads_map).fillna(1)
         
-        # Calculate percentages against total uploads
         df_scorecards["Saved_Pct"] = (df_scorecards["Saved_Count"] / df_scorecards["Total_Uploads"] * 100).round(1)
         df_scorecards["Discovery_Pct"] = (df_scorecards["Discovery_Count"] / df_scorecards["Total_Uploads"] * 100).round(1)
         
@@ -647,21 +645,27 @@ with tab3:
     if df_analytics.empty:
         st.info("No analytics data available for valid uploaders.")
     else:
+        # Calculate Median and IQR (Q3 - Q1) for each uploader
         stats = df_analytics.groupby("uploader_display_name").agg(
-            Average_Score=("score", "median"),
-            Std_Dev=("score", "std")
+            Median_Score=("score", "median"),
+            Q1=("score", lambda x: x.quantile(0.25)),
+            Q3=("score", lambda x: x.quantile(0.75))
         ).reset_index()
-        stats["Std_Dev"] = stats["Std_Dev"].fillna(0)
+        
+        # Calculate asymmetric error bars or symmetric error approximation for IQR bounds
+        stats["IQR_Minus"] = stats["Median_Score"] - stats["Q1"]
+        stats["IQR_Plus"] = stats["Q3"] - stats["Median_Score"]
 
         color_map = {row["uploader_display_name"]: get_uploader_color(row["uploader"]) for _, row in df_analytics.iterrows()}
 
         fig = px.scatter(
             stats,
             x="uploader_display_name",
-            y="Average_Score",
-            error_y="Std_Dev",
-            title="Performance Review",
-            labels={"uploader_display_name": "Uploader", "Average_Score": "Average Score"},
+            y="Median_Score",
+            error_y="IQR_Plus",
+            error_y_minus="IQR_Minus",
+            title="Performance Review (Median & IQR)",
+            labels={"uploader_display_name": "Uploader", "Median_Score": "Median Score"},
             color="uploader_display_name",
             color_discrete_map=color_map
         )
