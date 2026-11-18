@@ -433,6 +433,15 @@ if tab1 is not None:
                     "uploader", "Unknown"
                 )
                 color_code = get_uploader_color(row.get("uploader"))
+                t_id = row['id']
+
+                # Initialize session state keys for smooth interaction without dimming
+                if f"val_score_{t_id}" not in st.session_state:
+                    st.session_state[f"val_score_{t_id}"] = 3
+                if f"val_saved_{t_id}" not in st.session_state:
+                    st.session_state[f"val_saved_{t_id}"] = False
+                if f"val_disc_{t_id}" not in st.session_state:
+                    st.session_state[f"val_disc_{t_id}"] = False
 
                 with st.expander(
                     f"{row['song_name']} — {row['artist']} | Uploader: {uploader_name} | ⭐ Unjudged"
@@ -451,30 +460,32 @@ if tab1 is not None:
                     with form_col:
                         c1, c2, c3 = st.columns(3)
                         with c1:
-                            score = st.slider(
+                            st.slider(
                                 "Score (1-5)",
                                 1,
                                 5,
-                                3,
-                                key=f"score_{row['id']}",
+                                key=f"val_score_{t_id}",
                             )
                         with c2:
-                            is_saved = st.checkbox(
+                            st.checkbox(
                                 "Saved Song?",
-                                False,
-                                key=f"saved_{row['id']}",
+                                key=f"val_saved_{t_id}",
                             )
                         with c3:
-                            is_discovery = st.checkbox(
+                            st.checkbox(
                                 "Is a Discovery?",
-                                False,
-                                key=f"disc_{row['id']}",
+                                key=f"val_disc_{t_id}",
                             )
 
-                        if st.button("Save / Update Judgement", key=f"btn_{row['id']}"):
+                        if st.button("Save / Update Judgement", key=f"btn_{t_id}"):
                             current_time = datetime.now(timezone.utc).strftime(
                                 "%Y-%m-%d %H:%M:%S UTC"
                             )
+                            # Pull final values straight from session state on submit
+                            final_score = st.session_state[f"val_score_{t_id}"]
+                            final_saved = int(st.session_state[f"val_saved_{t_id}"])
+                            final_disc = int(st.session_state[f"val_disc_{t_id}"])
+
                             conn = get_db_connection()
                             cursor = conn.cursor()
                             cursor.execute(
@@ -484,11 +495,11 @@ if tab1 is not None:
                                     WHERE id = ?
                                 """,
                                 (
-                                    score,
-                                    int(is_saved),
-                                    int(is_discovery),
+                                    final_score,
+                                    final_saved,
+                                    final_disc,
                                     current_time,
-                                    row["id"],
+                                    t_id,
                                 ),
                             )
                             cursor.execute(
@@ -497,13 +508,13 @@ if tab1 is not None:
                                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                                 """,
                                 (
-                                    row["id"],
+                                    t_id,
                                     row["song_name"],
                                     row["artist"],
                                     row.get("image_url", ""),
-                                    score,
-                                    int(is_saved),
-                                    int(is_discovery),
+                                    final_score,
+                                    final_saved,
+                                    final_disc,
                                     current_time,
                                 ),
                             )
